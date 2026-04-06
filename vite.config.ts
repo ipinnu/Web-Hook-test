@@ -135,7 +135,7 @@ export default defineConfig({
             return
           }
           try {
-            const dataPath = path.join(process.cwd(), 'public', 'data.json')
+            const dataPath = path.join(process.cwd(), 'data.json')
             const data = fs.readFileSync(dataPath, 'utf8')
             res.setHeader('Content-Type', 'application/json')
             res.end(data)
@@ -184,7 +184,7 @@ export default defineConfig({
           res.end(JSON.stringify(getWarningEvents()))
         })
 
-        // Events log endpoint — for the log panel, reads from events.log and panic.log
+        // Events log endpoint — reads from events.log and panic.log, enriches with vehicle data
         server.middlewares.use('/api/events/log', async (req, res) => {
           if (!isAuthorized(req)) {
             res.statusCode = 401
@@ -199,13 +199,39 @@ export default defineConfig({
           try {
             const entries: any[] = []
 
+            // Load vehicle lookup from data.json for enrichment
+            const vehicleLookup = new Map<string, any>()
+            try {
+              const dataPath = path.join(process.cwd(), 'public', 'data.json')
+              if (fs.existsSync(dataPath)) {
+                const vehicles = JSON.parse(fs.readFileSync(dataPath, 'utf8'))
+                vehicles.forEach((v: any) => {
+                  vehicleLookup.set(v.id?.toString(), {
+                    regNo: v.regNo || 'N/A',
+                    assetName: v.assetName || 'Unknown Vehicle',
+                    transporter: v.transporter || 'N/A',
+                  })
+                })
+              }
+            } catch { }
+
+            const enrich = (entry: any) => {
+              const vehicle = vehicleLookup.get(entry.assetId?.toString()) || {}
+              return {
+                ...entry,
+                regNo: vehicle.regNo || 'N/A',
+                assetName: vehicle.assetName || 'Unknown Vehicle',
+                transporter: vehicle.transporter || 'N/A',
+              }
+            }
+
             const panicLogPath = path.join(process.cwd(), 'panic.log')
             if (fs.existsSync(panicLogPath)) {
               const lines = fs.readFileSync(panicLogPath, 'utf8').trim().split('\n').filter(Boolean)
               lines.forEach(line => {
                 try {
                   const entry = JSON.parse(line)
-                  entries.push({ ...entry, type: 'panic', label: 'Panic' })
+                  entries.push(enrich({ ...entry, type: 'panic', label: 'Panic' }))
                 } catch { }
               })
             }
@@ -216,7 +242,7 @@ export default defineConfig({
               lines.forEach(line => {
                 try {
                   const entry = JSON.parse(line)
-                  entries.push({ ...entry, type: 'warning' })
+                  entries.push(enrich({ ...entry, type: 'warning' }))
                 } catch { }
               })
             }

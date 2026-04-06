@@ -1228,6 +1228,16 @@ body {
     align-items: center;
   }
 
+  .cd-header-buttons {
+  gap: 6px !important;
+}
+
+.cd-header-buttons .cd-iconbtn {
+  height: 32px;
+  width: 32px;
+  border-radius: 8px;
+}
+
   .cd-logo {
     width: 48px;
     height: 48px;

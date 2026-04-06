@@ -295,6 +295,7 @@ async function getLatestActiveEvents(token) {
       rawEvent: e
     })).join('\n') + '\n';
     fs.appendFileSync(eventsLogPath, logEntries);
+    console.log(`📝 Warning logged to events.log`);
 
     warningEvents.forEach(e => {
       const assetId = e.AssetId?.toString();

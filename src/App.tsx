@@ -2,6 +2,7 @@ import { SignedIn, SignedOut, SignIn, useClerk } from "@clerk/clerk-react";
 import { useEffect, useState } from 'react';
 import { Moon, Sun, Power, RotateCcw, ScrollText, Download, Map, Table } from 'lucide-react';
 import AnomaliesTable from './components/AnomaliesTable';
+import MapView from './components/MapView';
 import EventLogPanel from './components/EventLogPanel';
 import DownloadModal from './components/DownloadModal';
 
@@ -121,6 +122,18 @@ function DashboardContent() {
     }
   };
 
+  const handleMapAcknowledge = async (id: string) => {
+  try {
+    await authFetch('/api/acknowledged', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+  } catch {
+    // ignore
+  }
+};
+
   const isDark = theme === 'dark';
   const cardBg = isDark ? 'var(--cd-surface)' : '#ffffff';
   const cardBorder = isDark ? 'var(--cd-border)' : '#e2e8f0';
@@ -192,7 +205,7 @@ function DashboardContent() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="cd-header-buttons flex items-center gap-3">
               <button
                 className="cd-iconbtn p-2 rounded-lg transition-colors"
                 onClick={() => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))}
@@ -304,12 +317,10 @@ function DashboardContent() {
 
           {/* Main View — Table or Map */}
           {viewMode === 'table' ? (
-            <AnomaliesTable statusFilter={statusFilter} onFilterChange={setStatusFilter} authFetch={authFetch} />
-          ) : (
-            <div style={{ backgroundColor: 'var(--cd-surface)', borderRadius: '14px', border: '1px solid var(--cd-border)', padding: '40px', textAlign: 'center', color: 'var(--cd-text-muted)', boxShadow: 'var(--cd-card-shadow)' }}>
-              Map view coming soon
-            </div>
-          )}
+              <AnomaliesTable statusFilter={statusFilter} onFilterChange={setStatusFilter} authFetch={authFetch} />
+            ) : (
+              <MapView authFetch={authFetch} statusFilter={statusFilter} onAcknowledge={handleMapAcknowledge} />
+            )}
         </div>
       </div>
     </div>

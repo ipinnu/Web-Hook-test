@@ -4,6 +4,9 @@ import { X, Search } from 'lucide-react';
 interface LogEntry {
   timestamp: string;
   assetId: string;
+  regNo?: string;
+  assetName?: string;
+  transporter?: string;
   eventId: string;
   label?: string;
   eventTime: string;
@@ -49,20 +52,30 @@ export default function EventLogPanel({ open, onClose, authFetch, isMobile }: Pr
 
   if (!open) return null;
 
+  // Filter to today by default
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
   const filtered = entries.filter(e => {
     const label = e.label || 'Panic';
-    const matchesFilter = activeFilter === 'All' || label === activeFilter || (activeFilter === 'Panic' && e.type === 'panic');
-    const assetId = e.rawEvent?.AssetId || e.assetId || '';
-    const assetName = e.rawEvent?.AssetName || '';
+    const matchesFilter = activeFilter === 'All' ||
+      (activeFilter === 'Panic' && e.type === 'panic') ||
+      label === activeFilter;
     const matchesSearch = searchTerm === '' ||
-      assetId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      assetName.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesFilter && matchesSearch;
+      (e.regNo && e.regNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (e.assetName && e.assetName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (e.transporter && e.transporter.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      e.assetId.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesToday = new Date(e.timestamp).getTime() >= todayStart.getTime();
+    return matchesFilter && matchesSearch && matchesToday;
   });
 
   const formatTime = (iso: string) => {
     try {
-      return new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+      return new Date(iso).toLocaleString('en-GB', {
+        day: '2-digit', month: '2-digit', year: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      });
     } catch { return iso; }
   };
 
@@ -89,12 +102,10 @@ export default function EventLogPanel({ open, onClose, authFetch, isMobile }: Pr
 
   return (
     <>
-      {/* Backdrop */}
       <div
         onClick={onClose}
         style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 199 }}
       />
-
       <div style={panelStyle}>
 
         {/* Header */}
@@ -111,7 +122,7 @@ export default function EventLogPanel({ open, onClose, authFetch, isMobile }: Pr
             <Search style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', width: '14px', height: '14px', color: 'var(--cd-text-soft)' }} />
             <input
               type="text"
-              placeholder="Search vehicle or asset ID..."
+              placeholder="Search reg no, asset or transporter..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               style={{ width: '100%', paddingLeft: '32px', paddingRight: '12px', paddingTop: '7px', paddingBottom: '7px', border: '1px solid var(--cd-border)', borderRadius: '8px', fontSize: '13px', outline: 'none', backgroundColor: 'var(--cd-surface-2)', color: 'var(--cd-text)' }}
@@ -152,11 +163,12 @@ export default function EventLogPanel({ open, onClose, authFetch, isMobile }: Pr
           {loading && entries.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--cd-text-muted)', fontSize: '13px' }}>Loading...</div>
           ) : filtered.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--cd-text-muted)', fontSize: '13px' }}>No events found</div>
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--cd-text-muted)', fontSize: '13px' }}>No events today</div>
           ) : filtered.map((entry, i) => {
             const isPanic = entry.type === 'panic';
             const label = entry.label || 'Panic';
             const address = entry.rawEvent?.Position?.FormattedAddress || '';
+            const displayName = entry.regNo && entry.regNo !== 'N/A' ? entry.regNo : entry.assetId;
             return (
               <div
                 key={`${entry.eventId}-${i}`}
@@ -174,8 +186,18 @@ export default function EventLogPanel({ open, onClose, authFetch, isMobile }: Pr
                   <span style={{ fontSize: '10px', color: 'var(--cd-text-soft)' }}>{formatTime(entry.timestamp)}</span>
                 </div>
                 <div style={{ fontSize: '12px', fontWeight: '500', color: 'var(--cd-text)', marginBottom: '2px' }}>
-                  Asset ID: {entry.assetId}
+                  {displayName}
                 </div>
+                {entry.assetName && entry.assetName !== 'Unknown Vehicle' && (
+                  <div style={{ fontSize: '11px', color: 'var(--cd-text-muted)', marginBottom: '2px' }}>
+                    {entry.assetName}
+                  </div>
+                )}
+                {entry.transporter && entry.transporter !== 'N/A' && (
+                  <div style={{ fontSize: '11px', color: 'var(--cd-text-muted)', marginBottom: '2px' }}>
+                    {entry.transporter}
+                  </div>
+                )}
                 {address && (
                   <div style={{ fontSize: '11px', color: 'var(--cd-text-muted)' }}>{address}</div>
                 )}
@@ -186,7 +208,7 @@ export default function EventLogPanel({ open, onClose, authFetch, isMobile }: Pr
 
         {/* Footer */}
         <div style={{ padding: '10px 16px', borderTop: '1px solid var(--cd-border)', fontSize: '11px', color: 'var(--cd-text-muted)', textAlign: 'center', flexShrink: 0 }}>
-          {filtered.length} event{filtered.length !== 1 ? 's' : ''} • auto-refreshes every 10s
+          {filtered.length} event{filtered.length !== 1 ? 's' : ''} today • auto-refreshes every 10s
         </div>
       </div>
     </>
