@@ -1,7 +1,9 @@
 import { SignedIn, SignedOut, SignIn, useClerk } from "@clerk/clerk-react";
 import { useEffect, useState } from 'react';
-import { Moon, Sun, Power, RotateCcw } from 'lucide-react';
+import { Moon, Sun, Power, RotateCcw, ScrollText, Download, Map, Table } from 'lucide-react';
 import AnomaliesTable from './components/AnomaliesTable';
+import EventLogPanel from './components/EventLogPanel';
+import DownloadModal from './components/DownloadModal';
 
 type StatusFilter = 'All' | 'Moving' | 'Idle' | 'Stationary' | 'Parked' | 'Inactive' | 'Offline';
 
@@ -46,6 +48,10 @@ function DashboardContent() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showLogPanel, setShowLogPanel] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'map'>('table');
+  const [isMobile, setIsMobile] = useState(false);
   const [metadata, setMetadata] = useState<Metadata>({
     totalVehicles: 0,
     moving: 0,
@@ -60,21 +66,19 @@ function DashboardContent() {
   const { signOut } = useClerk();
 
   useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  useEffect(() => {
     const saved = window.localStorage.getItem('cd-theme') as 'light' | 'dark' | null;
     const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     const nextTheme = saved ?? (prefersDark ? 'dark' : 'light');
     setTheme(nextTheme);
     document.documentElement.dataset.theme = nextTheme;
   }, []);
-
-  const [isMobile, setIsMobile] = useState(false);
-
-useEffect(() => {
-  const checkMobile = () => setIsMobile(window.innerWidth <= 768);
-  checkMobile();
-  window.addEventListener('resize', checkMobile);
-  return () => window.removeEventListener('resize', checkMobile);
-}, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -135,18 +139,8 @@ useEffect(() => {
                   Are you sure you want to log out of the dashboard?
                 </div>
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                  <button
-                    onClick={() => setShowLogoutConfirm(false)}
-                    style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid var(--cd-border)', backgroundColor: 'var(--cd-surface-2)', color: 'var(--cd-text)', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => signOut()}
-                    style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#c8102e', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}
-                  >
-                    Log Out
-                  </button>
+                  <button onClick={() => setShowLogoutConfirm(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid var(--cd-border)', backgroundColor: 'var(--cd-surface-2)', color: 'var(--cd-text)', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>Cancel</button>
+                  <button onClick={() => signOut()} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#c8102e', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>Log Out</button>
                 </div>
               </div>
             </div>
@@ -161,22 +155,27 @@ useEffect(() => {
                   This will clear all panic alerts and event history.
                 </div>
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-                  <button
-                    onClick={() => setShowResetConfirm(false)}
-                    style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid var(--cd-border)', backgroundColor: 'var(--cd-surface-2)', color: 'var(--cd-text)', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleReset}
-                    disabled={resetting}
-                    style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#d97706', color: '#fff', cursor: resetting ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600' }}
-                  >
-                    {resetting ? 'Resetting...' : 'Reset'}
-                  </button>
+                  <button onClick={() => setShowResetConfirm(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid var(--cd-border)', backgroundColor: 'var(--cd-surface-2)', color: 'var(--cd-text)', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>Cancel</button>
+                  <button onClick={handleReset} disabled={resetting} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#d97706', color: '#fff', cursor: resetting ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '600' }}>{resetting ? 'Resetting...' : 'Reset'}</button>
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Event Log Panel */}
+          <EventLogPanel
+            open={showLogPanel}
+            onClose={() => setShowLogPanel(false)}
+            authFetch={authFetch}
+            isMobile={isMobile}
+          />
+
+          {/* Download Modal */}
+          {showDownloadModal && (
+            <DownloadModal
+              onClose={() => setShowDownloadModal(false)}
+              authFetch={authFetch}
+            />
           )}
 
           {/* Header */}
@@ -200,6 +199,33 @@ useEffect(() => {
                 aria-label="Toggle dark mode"
               >
                 {theme === 'dark' ? <Sun className="w-5 h-5 text-gray-600" /> : <Moon className="w-5 h-5 text-gray-600" />}
+              </button>
+
+              <button
+                className="cd-iconbtn p-2 rounded-lg transition-colors"
+                onClick={() => setShowLogPanel(true)}
+                aria-label="Event log"
+                title="Event Log"
+              >
+                <ScrollText className="w-5 h-5 text-gray-600" />
+              </button>
+
+              <button
+                className="cd-iconbtn p-2 rounded-lg transition-colors"
+                onClick={() => setShowDownloadModal(true)}
+                aria-label="Download report"
+                title="Download Report"
+              >
+                <Download className="w-5 h-5 text-gray-600" />
+              </button>
+
+              <button
+                className="cd-iconbtn p-2 rounded-lg transition-colors"
+                onClick={() => setViewMode(prev => prev === 'table' ? 'map' : 'table')}
+                aria-label="Toggle map view"
+                title={viewMode === 'table' ? 'Switch to Map View' : 'Switch to Table View'}
+              >
+                {viewMode === 'table' ? <Map className="w-5 h-5 text-gray-600" /> : <Table className="w-5 h-5 text-gray-600" />}
               </button>
 
               <button
@@ -228,6 +254,7 @@ useEffect(() => {
             border: `1px solid ${cardBorder}`,
             boxShadow: 'var(--cd-card-shadow)',
             marginBottom: isMobile ? '12px' : '24px',
+            marginTop: isMobile ? '8px' : '0px',
           }}>
             <div className="cd-stats-scroll">
               {statConfig.map(stat => {
@@ -275,8 +302,14 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* Anomalies Table */}
-          <AnomaliesTable statusFilter={statusFilter} onFilterChange={setStatusFilter} authFetch={authFetch} />
+          {/* Main View — Table or Map */}
+          {viewMode === 'table' ? (
+            <AnomaliesTable statusFilter={statusFilter} onFilterChange={setStatusFilter} authFetch={authFetch} />
+          ) : (
+            <div style={{ backgroundColor: 'var(--cd-surface)', borderRadius: '14px', border: '1px solid var(--cd-border)', padding: '40px', textAlign: 'center', color: 'var(--cd-text-muted)', boxShadow: 'var(--cd-card-shadow)' }}>
+              Map view coming soon
+            </div>
+          )}
         </div>
       </div>
     </div>

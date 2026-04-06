@@ -2,7 +2,6 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
-// scripts/auto-poll-chevron-data.js
 import fetch from "node-fetch";
 import fs from "fs";
 import path from "path";
@@ -34,22 +33,51 @@ function getCurrentSinceToken() {
   return `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}000`;
 }
 
-// let sinceToken = getCurrentSinceToken(); // COMMENTED OUT — history events endpoint disabled
 let activeSinceToken = getCurrentSinceToken();
 let activeParseRetryDone = false;
 let cachedToken = null;
 let tokenExpiresAt = 0;
 
 const PANIC_EVENT_TYPE_ID = '-4444421556390778105';
+
+const WARNING_EVENT_TYPES = {
+  '4750800303282680186': 'Harsh Brake',
+  '6454149451280645233': 'Harsh Accel',
+  '-3890646499157906515': 'Overspeed',
+  '-4596269900191457380': 'Overspeed Tiered',
+  '4291175374538259638': 'Harsh Corner',
+};
+
 const triggeredEvents = new Map();
+const triggeredWarningEvents = new Map();
+
+function cleanStaleWarnings() {
+  const cutoff = Date.now() - 60_000;
+  triggeredWarningEvents.forEach((events, assetId) => {
+    const fresh = events.filter(e => new Date(e.timestamp).getTime() > cutoff);
+    if (fresh.length === 0) {
+      triggeredWarningEvents.delete(assetId);
+    } else {
+      triggeredWarningEvents.set(assetId, fresh);
+    }
+  });
+}
 
 export function clearTriggeredEvent(assetId) {
   triggeredEvents.delete(assetId);
 }
 
+export function getWarningEvents() {
+  const result = {};
+  triggeredWarningEvents.forEach((events, assetId) => {
+    result[assetId] = events;
+  });
+  return result;
+}
+
 export function resetState() {
   triggeredEvents.clear();
-  // sinceToken = getCurrentSinceToken(); // COMMENTED OUT — history events endpoint disabled
+  triggeredWarningEvents.clear();
   activeSinceToken = getCurrentSinceToken();
   activeParseRetryDone = false;
   cachedToken = null;
@@ -150,59 +178,7 @@ async function getLatestPositions(token) {
 // pipeline (getLatestActiveEvents) catches panics faster and
 // more reliably. Re-enable if active events ever proves unreliable.
 // ============================================================
-// async function getActiveEvents(token) {
-//   const endpoint = `${API_BASE}/events/groups/createdsince/organisation/${CHEVRON_ORG_ID}/sincetoken/${sinceToken}/quantity/1000`;
-//
-//   const response = await fetch(endpoint, {
-//     headers: {
-//       "Authorization": `Bearer ${token}`,
-//       "Accept": "application/json",
-//     },
-//   });
-//
-//   if (response.status === 401) {
-//     cachedToken = null;
-//     tokenExpiresAt = 0;
-//     console.log('⚠️ Token rejected by events endpoint, will re-authenticate next poll');
-//     return [];
-//   }
-//   if (response.status === 204 || !response.ok) {
-//     return [];
-//   }
-//
-//   const newToken = response.headers.get('GetSinceToken');
-//   const text = await response.text();
-//
-//   let parsed;
-//   try {
-//     const safe = text.replace(/:\s*(-?\d{16,})/g, ': "$1"');
-//     parsed = JSON.parse(safe);
-//   } catch (e) {
-//     if (!parseRetryDone) {
-//       console.log('⚠️ Parse failed, retrying once on next poll...');
-//       parseRetryDone = true;
-//       return [];
-//     }
-//     console.log('⚠️ Parse failed again, advancing sinceToken and moving on. Events may have been lost.');
-//     parseRetryDone = false;
-//     if (newToken) {
-//       sinceToken = newToken;
-//       console.log(`📌 Updated sinceToken: ${sinceToken}`);
-//     }
-//     return [];
-//   }
-//
-//   parseRetryDone = false;
-//   if (newToken) {
-//     sinceToken = newToken;
-//     console.log(`📌 Updated sinceToken: ${sinceToken}`);
-//   }
-//
-//   parsed.slice(0, 10).forEach(e => {
-//     console.log(`🔍 Event - AssetId: ${e.AssetId} | EventTypeId: ${e.EventTypeId} | EventCategory: ${e.EventCategory} | Time: ${e.StartDateTime}`);
-//   });
-//   return parsed;
-// }
+// async function getActiveEvents(token) { ... }
 
 async function getActivePanicEvents(token) {
   const endpoint = `${API_BASE}/activeevents/groups/createdsince/organisation/${CHEVRON_ORG_ID}/sincetoken/NEW/quantity/1000`;
@@ -283,6 +259,7 @@ async function getLatestActiveEvents(token) {
     console.log(`📌 Updated activeSinceToken: ${activeSinceToken}`);
   }
 
+  // Handle panic events
   const panicEvents = parsed.filter(e => e.EventTypeId === PANIC_EVENT_TYPE_ID);
   if (panicEvents.length > 0) {
     console.log(`🔎 Active Panic found: ${panicEvents.length}`);
@@ -291,16 +268,54 @@ async function getLatestActiveEvents(token) {
     });
     const logPath = path.join(process.cwd(), 'panic.log');
     const logEntries = panicEvents.map(e => JSON.stringify({
-    timestamp: new Date().toISOString(),
-    assetId: e.AssetId,
-    eventId: e.EventId,
-    eventTime: e.EventDateTime,
-    receivedAt: e.ReceivedDateTime,
-    rawEvent: e
-  })).join('\n') + '\n';
+      timestamp: new Date().toISOString(),
+      assetId: e.AssetId,
+      eventId: e.EventId,
+      eventTime: e.EventDateTime,
+      receivedAt: e.ReceivedDateTime,
+      rawEvent: e
+    })).join('\n') + '\n';
+    fs.appendFileSync(logPath, logEntries);
+    console.log(`📝 Panic logged to panic.log`);
+  }
 
-  fs.appendFileSync(logPath, logEntries);
-  console.log(`📝 Panic logged to panic.log`);
+  // Handle warning events
+  const warningEvents = parsed.filter(e => WARNING_EVENT_TYPES[e.EventTypeId]);
+  if (warningEvents.length > 0) {
+    console.log(`⚠️ Warning events found: ${warningEvents.length}`);
+    const eventsLogPath = path.join(process.cwd(), 'events.log');
+    const logEntries = warningEvents.map(e => JSON.stringify({
+      timestamp: new Date().toISOString(),
+      assetId: e.AssetId,
+      eventId: e.EventId,
+      eventType: e.EventTypeId,
+      label: WARNING_EVENT_TYPES[e.EventTypeId],
+      eventTime: e.EventDateTime,
+      receivedAt: e.ReceivedDateTime,
+      rawEvent: e
+    })).join('\n') + '\n';
+    fs.appendFileSync(eventsLogPath, logEntries);
+
+    warningEvents.forEach(e => {
+      const assetId = e.AssetId?.toString();
+      const label = WARNING_EVENT_TYPES[e.EventTypeId];
+      console.log(`⚠️ ${label} - AssetId: ${assetId} | EventTime: ${e.EventDateTime}`);
+      if (assetId) {
+        if (!triggeredWarningEvents.has(assetId)) {
+          triggeredWarningEvents.set(assetId, []);
+        }
+        const existing = triggeredWarningEvents.get(assetId);
+        const alreadyStored = existing.some(ev => ev.eventId === e.EventId);
+        if (!alreadyStored) {
+          existing.push({
+            eventId: e.EventId,
+            label,
+            timestamp: new Date().toISOString(),
+            eventTime: e.EventDateTime,
+          });
+        }
+      }
+    });
   }
 
   return parsed;
@@ -318,6 +333,7 @@ function mergeData(vehicles, positions) {
 
     const vehicleEvents = triggeredEvents.get(assetId) || [];
     const hasPanic = vehicleEvents.some(e => e.EventTypeId === PANIC_EVENT_TYPE_ID);
+    const warningEvents = triggeredWarningEvents.get(assetId) || [];
 
     let status = 'Offline';
     if (pos) {
@@ -351,6 +367,7 @@ function mergeData(vehicles, positions) {
         ? new Date(pos.Timestamp).toLocaleString('en-GB')
         : new Date().toLocaleString('en-GB'),
       panic: hasPanic,
+      warnings: warningEvents,
       position: pos ? {
         latitude: pos.Latitude,
         longitude: pos.Longitude,
@@ -368,6 +385,7 @@ export async function pollOnce() {
 
   inFlight = (async () => {
     runCount++;
+    cleanStaleWarnings();
 
     console.log("\n" + "=".repeat(70));
     console.log(`RUN #${runCount} of ${pollingMaxRuns ?? "∞"} - ${new Date().toLocaleString('en-GB')}`);
@@ -379,7 +397,6 @@ export async function pollOnce() {
 
       const [vehicles, latestActiveEvents, positions] = await Promise.all([
         getVehicles(token),
-        // getActiveEvents(token), // COMMENTED OUT — history events endpoint disabled
         getLatestActiveEvents(token),
         getLatestPositions(token),
       ]);
@@ -419,6 +436,7 @@ export async function pollOnce() {
         parked: merged.filter(v => v.status === 'Parked').length,
         inactive: merged.filter(v => v.status === 'Inactive').length,
         offline: merged.filter(v => v.status === 'Offline').length,
+        warnings: merged.filter(v => v.warnings && v.warnings.length > 0).length,
       };
 
       const dataPath = path.join(process.cwd(), 'public', 'data.json');
@@ -433,7 +451,7 @@ export async function pollOnce() {
       };
       fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
 
-      console.log(`📊 Panic: ${stats.panic} | Moving: ${stats.moving} | Idle: ${stats.idle} | Stationary: ${stats.stationary} | Parked: ${stats.parked} | Inactive: ${stats.inactive} | Offline: ${stats.offline}`);
+      console.log(`📊 Panic: ${stats.panic} | Warnings: ${stats.warnings} | Moving: ${stats.moving} | Idle: ${stats.idle} | Stationary: ${stats.stationary} | Parked: ${stats.parked} | Inactive: ${stats.inactive} | Offline: ${stats.offline}`);
       console.log("💾 Saved to data.json");
 
       if (stats.panic > 0) {
@@ -442,6 +460,10 @@ export async function pollOnce() {
         panicVehicles.forEach(v => {
           console.log(`   ${v.regNo} - ${v.assetName}`);
         });
+      }
+
+      if (stats.warnings > 0) {
+        console.log(`\n⚠️ ${stats.warnings} vehicle(s) with active warnings`);
       }
 
       return { ok: true, stats, runCount };

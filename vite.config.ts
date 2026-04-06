@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { pollOnce, startPolling, clearTriggeredEvent, resetState } from './scripts/mix-test.js'
+import { pollOnce, startPolling, clearTriggeredEvent, resetState, getWarningEvents } from './scripts/mix-test.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -165,6 +165,69 @@ export default defineConfig({
           } catch {
             res.statusCode = 404
             res.end('Not Found')
+          }
+        })
+
+        // Warning events endpoint
+        server.middlewares.use('/api/events', async (req, res) => {
+          if (!isAuthorized(req)) {
+            res.statusCode = 401
+            res.end('Unauthorized')
+            return
+          }
+          if (req.method !== 'GET') {
+            res.statusCode = 405
+            res.end('Method Not Allowed')
+            return
+          }
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(getWarningEvents()))
+        })
+
+        // Events log endpoint — for the log panel, reads from events.log and panic.log
+        server.middlewares.use('/api/events/log', async (req, res) => {
+          if (!isAuthorized(req)) {
+            res.statusCode = 401
+            res.end('Unauthorized')
+            return
+          }
+          if (req.method !== 'GET') {
+            res.statusCode = 405
+            res.end('Method Not Allowed')
+            return
+          }
+          try {
+            const entries: any[] = []
+
+            const panicLogPath = path.join(process.cwd(), 'panic.log')
+            if (fs.existsSync(panicLogPath)) {
+              const lines = fs.readFileSync(panicLogPath, 'utf8').trim().split('\n').filter(Boolean)
+              lines.forEach(line => {
+                try {
+                  const entry = JSON.parse(line)
+                  entries.push({ ...entry, type: 'panic', label: 'Panic' })
+                } catch { }
+              })
+            }
+
+            const eventsLogPath = path.join(process.cwd(), 'events.log')
+            if (fs.existsSync(eventsLogPath)) {
+              const lines = fs.readFileSync(eventsLogPath, 'utf8').trim().split('\n').filter(Boolean)
+              lines.forEach(line => {
+                try {
+                  const entry = JSON.parse(line)
+                  entries.push({ ...entry, type: 'warning' })
+                } catch { }
+              })
+            }
+
+            entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(entries))
+          } catch {
+            res.statusCode = 500
+            res.end('Internal Server Error')
           }
         })
       },
