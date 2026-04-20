@@ -188,7 +188,7 @@ app.get('/api/events/log', (req, res) => {
 app.use(express.static(path.join(__dirname, 'dist')))
 
 // All other routes serve index.html
-app.get('*', (req, res) => {
+app.get('(.*)', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
 
