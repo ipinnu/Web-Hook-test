@@ -7,12 +7,13 @@ import EventLogPanel from './components/EventLogPanel';
 import DownloadModal from './components/DownloadModal';
 import DriverRiskPanel from './components/DriverRiskPanel';
 
-type StatusFilter = 'All' | 'Moving' | 'Idle' | 'Stationary' | 'Parked' | 'Offline' | 'Inactive';
+type StatusFilter = 'All' | 'Moving' | 'Idle' | 'Excessive Idle' | 'Stationary' | 'Parked' | 'Offline' | 'Inactive';
 
 interface Metadata {
   totalVehicles: number;
   moving: number;
   idle: number;
+  excessiveIdle: number;
   stationary: number;
   parked: number;
   inactive: number;
@@ -21,15 +22,24 @@ interface Metadata {
   lastUpdate: string;
 }
 
-const statConfig: { key: keyof Omit<Metadata, 'lastUpdate'>; label: string; filter: StatusFilter | 'All'; color: string; bg: string; border: string; tooltip: string }[] = [
-  { key: 'totalVehicles', label: 'Total', filter: 'All', color: '#7c3aed', bg: '#f5f3ff', border: '#c4b5fd', tooltip: 'Total number of vehicles in the fleet' },
-  { key: 'moving', label: 'Moving', filter: 'Moving', color: '#16a34a', bg: '#dcfce7', border: '#86efac', tooltip: 'Vehicle is actively travelling at a speed above 5 km/h' },
-  { key: 'idle', label: 'Idle', filter: 'Idle', color: '#d97706', bg: '#fef3c7', border: '#fde68a', tooltip: 'Vehicle is moving slowly between 3 and 5 km/h, or stopped within the last 5 minutes' },
-  { key: 'stationary', label: 'Stationary', filter: 'Stationary', color: '#0d9488', bg: '#f0fdfa', border: '#99f6e4', tooltip: 'Vehicle has been stationary for less than 1 hour' },
-  { key: 'parked', label: 'Parked', filter: 'Parked', color: '#ea580c', bg: '#fff7ed', border: '#fed7aa', tooltip: 'Vehicle has been stationary for between 1 and 24 hours' },
-  { key: 'offline', label: 'Offline', filter: 'Offline', color: '#64748b', bg: '#f1f5f9', border: '#e2e8f0', tooltip: 'Vehicle has not moved in over 24 hours' },
-  { key: 'inactive', label: 'Inactive', filter: 'Inactive', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'Vehicle has not moved in over 30 days' },
-  { key: 'panic', label: 'Panic', filter: 'All', color: '#c8102e', bg: '#fff1f2', border: '#fecdd3', tooltip: 'Vehicle has an active panic alert' },
+const statConfig: {
+  key: keyof Omit<Metadata, 'lastUpdate'>;
+  label: string;
+  filter: StatusFilter | 'All';
+  color: string;
+  bg: string;
+  border: string;
+  tooltip: string;
+}[] = [
+  { key: 'totalVehicles', label: 'Total',          filter: 'All',            color: '#7c3aed', bg: '#f5f3ff', border: '#c4b5fd', tooltip: 'Total number of vehicles in the fleet' },
+  { key: 'moving',        label: 'Moving',          filter: 'Moving',         color: '#16a34a', bg: '#dcfce7', border: '#86efac', tooltip: 'Vehicle is actively travelling above 5 km/h' },
+  { key: 'idle',          label: 'Idle',            filter: 'Idle',           color: '#d97706', bg: '#fef3c7', border: '#fde68a', tooltip: 'Vehicle is idling' },
+  { key: 'excessiveIdle', label: 'Excessive Idle',       filter: 'Excessive Idle', color: '#b45309', bg: '#fef9c3', border: '#fcd34d', tooltip: 'Vehicle has been idling excessively' },
+  { key: 'stationary',    label: 'Stationary',      filter: 'Stationary',     color: '#0d9488', bg: '#f0fdfa', border: '#99f6e4', tooltip: 'Vehicle has been stationary for less than 1 hour' },
+  { key: 'parked',        label: 'Parked',          filter: 'Parked',         color: '#ea580c', bg: '#fff7ed', border: '#fed7aa', tooltip: 'Vehicle has been stationary for between 1 and 24 hours' },
+  { key: 'offline',       label: 'Offline',         filter: 'Offline',        color: '#64748b', bg: '#f1f5f9', border: '#e2e8f0', tooltip: 'Vehicle has not moved in over 24 hours' },
+  { key: 'inactive',      label: 'Inactive',        filter: 'Inactive',       color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', tooltip: 'Vehicle has not moved in over 30 days' },
+  { key: 'panic',         label: 'Panic',           filter: 'All',            color: '#c8102e', bg: '#fff1f2', border: '#fecdd3', tooltip: 'Vehicle has an active panic alert' },
 ];
 
 const API_SECRET = import.meta.env.VITE_API_SECRET;
@@ -43,6 +53,36 @@ const authFetch = (url: string, options: RequestInit = {}) => {
     },
   });
 };
+
+// ── Audio helpers ─────────────────────────────────────────────────────────────
+let audioCtx: AudioContext | null = null;
+
+function getAudioContext(): AudioContext {
+  if (!audioCtx) audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  return audioCtx;
+}
+
+function playTing(frequency = 880, duration = 0.15, volume = 0.4) {
+  try {
+    const ctx = getAudioContext();
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(frequency, ctx.currentTime);
+    gainNode.gain.setValueAtTime(volume, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    oscillator.start(ctx.currentTime);
+    oscillator.stop(ctx.currentTime + duration);
+  } catch {
+    // ignore — audio context may not be available
+  }
+}
+
+// Different tings for different event types
+function playWarningTing() { playTing(880, 0.15, 0.35); }   // high — warning event
+function playExcessiveIdleTing() { playTing(440, 0.2, 0.3); } // low — excessive idle
 
 function DashboardContent() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
@@ -60,10 +100,14 @@ function DashboardContent() {
   const [panicVehicles, setPanicVehicles] = useState<any[]>([]);
   const repeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const panicVehiclesRef = useRef<any[]>([]);
+  const prevWarningsRef = useRef<number>(0);
+  const prevExcessiveIdleRef = useRef<number>(0);
+
   const [metadata, setMetadata] = useState<Metadata>({
     totalVehicles: 0,
     moving: 0,
     idle: 0,
+    excessiveIdle: 0,
     stationary: 0,
     parked: 0,
     inactive: 0,
@@ -127,6 +171,23 @@ function DashboardContent() {
       const res = await authFetch('/api/metadata');
       if (res.ok) {
         const data = await res.json();
+
+        // Play tings when new events come in
+        if (audioEnabled) {
+          const newWarnings = data.warnings ?? 0;
+          const newExcessiveIdle = data.excessiveIdle ?? 0;
+
+          if (newWarnings > prevWarningsRef.current) {
+            playWarningTing();
+          }
+          if (newExcessiveIdle > prevExcessiveIdleRef.current) {
+            playExcessiveIdleTing();
+          }
+
+          prevWarningsRef.current = newWarnings;
+          prevExcessiveIdleRef.current = newExcessiveIdle;
+        }
+
         setMetadata(data);
       }
     } catch {
@@ -265,12 +326,12 @@ function DashboardContent() {
           )}
 
           {/* Driver Risk Panel */}
-            <DriverRiskPanel
-              open={showDriverRiskPanel}
-              onClose={() => setShowDriverRiskPanel(false)}
-              authFetch={authFetch}
-              isMobile={isMobile}
-            />
+          <DriverRiskPanel
+            open={showDriverRiskPanel}
+            onClose={() => setShowDriverRiskPanel(false)}
+            authFetch={authFetch}
+            isMobile={isMobile}
+          />
 
           {/* Header */}
           <div className="cd-header mb-8">
@@ -322,7 +383,7 @@ function DashboardContent() {
           }}>
             <div className="cd-stats-scroll">
               {statConfig.map(stat => {
-                const value = metadata[stat.key];
+                const value = metadata[stat.key] ?? 0;
                 const isActive = stat.key === 'panic'
                   ? false
                   : (stat.filter === 'All' ? statusFilter === 'All' : statusFilter === stat.filter);
@@ -352,7 +413,7 @@ function DashboardContent() {
             </div>
           </div>
 
-          {/* Panic Banner — always visible regardless of view */}
+          {/* Panic Banner */}
           {panicVehicles.length > 0 && (
             <div style={{ backgroundColor: 'var(--cd-danger-bg)', border: '1px solid var(--cd-danger-border)', borderRadius: '8px', padding: isMobile ? '12px' : '16px 20px', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 10px 24px rgba(200, 16, 46, 0.2)', animation: 'flash 1s infinite', gap: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
@@ -380,7 +441,7 @@ function DashboardContent() {
             </div>
           )}
 
-          {/* Main View — Table or Map */}
+          {/* Main View */}
           {viewMode === 'table' ? (
             <AnomaliesTable statusFilter={statusFilter} onFilterChange={setStatusFilter} authFetch={authFetch} />
           ) : (

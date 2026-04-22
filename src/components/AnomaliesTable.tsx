@@ -13,14 +13,14 @@ interface Anomaly {
   regNo: string;
   transporter: string;
   assetName: string;
-  status: 'Moving' | 'Idle' | 'Stationary' | 'Parked' | 'Inactive' | 'Offline';
+  status: 'Moving' | 'Idle' | 'Excessive Idle' | 'Stationary' | 'Parked' | 'Inactive' | 'Offline';
   date: string;
   panic: boolean;
   warnings?: Warning[];
   address?: string;
 }
 
-type StatusFilter = 'All' | 'Moving' | 'Idle' | 'Stationary' | 'Parked' | 'Inactive' | 'Offline';
+type StatusFilter = 'All' | 'Moving' | 'Idle' | 'Excessive Idle' | 'Stationary' | 'Parked' | 'Offline' | 'Inactive';
 
 interface Props {
   statusFilter: StatusFilter;
@@ -128,9 +128,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
           const ids: string[] = await res.json();
           ids.forEach(id => acknowledgedIds.current.add(id));
         }
-      } catch {
-        // ignore
-      }
+      } catch { }
     };
     fetchAcknowledged();
   }, []);
@@ -169,7 +167,6 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
       setLoading(false);
     } catch (err) {
       if (active && !active.current) return;
-      console.error('Error loading data.json:', err);
       setLoading(false);
     }
   };
@@ -205,9 +202,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
   }, []);
 
   useEffect(() => {
-    return () => {
-      warningTimers.current.forEach(t => clearTimeout(t));
-    };
+    return () => { warningTimers.current.forEach(t => clearTimeout(t)); };
   }, []);
 
   const handleAcknowledge = async (anomalyId: string) => {
@@ -217,9 +212,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: anomalyId }),
       });
-    } catch {
-      // ignore
-    }
+    } catch { }
     acknowledgedIds.current.add(anomalyId);
     setAnomalies(prev => prev.map(anomaly =>
       anomaly.id === anomalyId ? { ...anomaly, panic: false } : anomaly
@@ -250,9 +243,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentPageItems = filteredAnomalies.slice(startIndex, endIndex);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter]);
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -263,8 +254,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
       await res.json();
       await loadData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Refresh failed';
-      setRefreshError(message);
+      setRefreshError(err instanceof Error ? err.message : 'Refresh failed');
     } finally {
       setRefreshing(false);
     }
@@ -272,13 +262,14 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
 
   const getStatusColor = (status: Anomaly['status']) => {
     switch (status) {
-      case 'Moving':     return { bg: 'var(--cd-status-moving-bg)',     text: 'var(--cd-status-moving-text)',     border: 'var(--cd-status-moving-border)' };
-      case 'Idle':       return { bg: 'var(--cd-status-idle-bg)',       text: 'var(--cd-status-idle-text)',       border: 'var(--cd-status-idle-border)' };
-      case 'Stationary': return { bg: 'var(--cd-status-stationary-bg)', text: 'var(--cd-status-stationary-text)', border: 'var(--cd-status-stationary-border)' };
-      case 'Parked':     return { bg: 'var(--cd-status-parked-bg)',     text: 'var(--cd-status-parked-text)',     border: 'var(--cd-status-parked-border)' };
-      case 'Inactive':   return { bg: 'var(--cd-status-inactive-bg)',   text: 'var(--cd-status-inactive-text)',   border: 'var(--cd-status-inactive-border)' };
-      case 'Offline':    return { bg: 'var(--cd-status-offline-bg)',    text: 'var(--cd-status-offline-text)',    border: 'var(--cd-status-offline-border)' };
-      default:           return { bg: 'var(--cd-status-offline-bg)',    text: 'var(--cd-status-offline-text)',    border: 'var(--cd-status-offline-border)' };
+      case 'Moving':         return { bg: 'var(--cd-status-moving-bg)',     text: 'var(--cd-status-moving-text)',     border: 'var(--cd-status-moving-border)' };
+      case 'Idle':           return { bg: 'var(--cd-status-idle-bg)',       text: 'var(--cd-status-idle-text)',       border: 'var(--cd-status-idle-border)' };
+      case 'Excessive Idle': return { bg: '#fef9c3',                         text: '#b45309',                          border: '#fcd34d' };
+      case 'Stationary':     return { bg: 'var(--cd-status-stationary-bg)', text: 'var(--cd-status-stationary-text)', border: 'var(--cd-status-stationary-border)' };
+      case 'Parked':         return { bg: 'var(--cd-status-parked-bg)',     text: 'var(--cd-status-parked-text)',     border: 'var(--cd-status-parked-border)' };
+      case 'Inactive':       return { bg: 'var(--cd-status-inactive-bg)',   text: 'var(--cd-status-inactive-text)',   border: 'var(--cd-status-inactive-border)' };
+      case 'Offline':        return { bg: 'var(--cd-status-offline-bg)',    text: 'var(--cd-status-offline-text)',    border: 'var(--cd-status-offline-border)' };
+      default:               return { bg: 'var(--cd-status-offline-bg)',    text: 'var(--cd-status-offline-text)',    border: 'var(--cd-status-offline-border)' };
     }
   };
 
@@ -294,7 +285,6 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
     <div style={{ fontFamily: 'var(--cd-font-body)' }}>
       <div>
 
-        {/* Reconnection Banner */}
         {isStale && (
           <div style={{ backgroundColor: '#fefce8', border: '1px solid #fde047', borderRadius: '8px', padding: '12px 20px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <WifiOff style={{ width: '18px', height: '18px', color: '#ca8a04', flexShrink: 0 }} />
@@ -378,27 +368,25 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                   const colors = getStatusColor(anomaly.status);
                   const isPanic = anomaly.panic;
                   const hasWarnings = anomaly.warnings && anomaly.warnings.length > 0;
+                  const isExcessiveIdle = anomaly.status === 'Excessive Idle';
                   return (
                     <div
                       key={anomaly.id}
                       style={{
                         padding: '14px',
-                        backgroundColor: isPanic ? 'var(--cd-danger-bg)' : hasWarnings ? '#fffbeb' : 'var(--cd-surface)',
+                        backgroundColor: isPanic ? 'var(--cd-danger-bg)' : hasWarnings ? '#fffbeb' : isExcessiveIdle ? '#fefce8' : 'var(--cd-surface)',
                         borderRadius: '10px',
-                        border: `1px solid ${isPanic ? 'var(--cd-danger-border)' : hasWarnings ? '#fde68a' : 'var(--cd-border)'}`,
+                        border: `1px solid ${isPanic ? 'var(--cd-danger-border)' : hasWarnings ? '#fde68a' : isExcessiveIdle ? '#fcd34d' : 'var(--cd-border)'}`,
                         boxShadow: isPanic ? '0 6px 16px rgba(200, 16, 46, 0.28)' : 'var(--cd-soft-shadow)',
                         position: 'relative',
                         animation: isPanic ? 'flash 0.8s infinite' : 'none',
                       }}
                     >
                       {isPanic && (
-                        <div style={{ position: 'absolute', top: '-8px', right: '12px', backgroundColor: 'var(--cd-danger)', color: '#fff', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 2px 8px rgba(200, 16, 46, 0.4)', animation: 'pulse 1.5s infinite' }}>
-                          !
-                        </div>
+                        <div style={{ position: 'absolute', top: '-8px', right: '12px', backgroundColor: 'var(--cd-danger)', color: '#fff', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 2px 8px rgba(200, 16, 46, 0.4)', animation: 'pulse 1.5s infinite' }}>!</div>
                       )}
-
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
-                        <span style={{ fontSize: '14px', fontWeight: '600', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : 'var(--cd-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '14px', fontWeight: '600', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : isExcessiveIdle ? '#b45309' : 'var(--cd-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {anomaly.assetName}
                         </span>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px', borderRadius: '9999px', fontSize: '11px', fontWeight: '500', backgroundColor: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, flexShrink: 0 }}>
@@ -406,34 +394,20 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                           {anomaly.status}
                         </span>
                       </div>
-
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
                         <span style={{ fontSize: '12px', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : 'var(--cd-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
                           {(anomaly as any).position?.address || 'Unknown location'}
                         </span>
                         {(anomaly as any).position?.latitude && (
-                          <a href={`https://www.google.com/maps?q=${(anomaly as any).position.latitude},${(anomaly as any).position.longitude}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ flexShrink: 0, color: '#0d9488', lineHeight: 1, textDecoration: 'none', fontSize: '14px' }}>
-                            📍
-                          </a>
+                          <a href={`https://www.google.com/maps?q=${(anomaly as any).position.latitude},${(anomaly as any).position.longitude}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, color: '#0d9488', lineHeight: 1, textDecoration: 'none', fontSize: '14px' }}>📍</a>
                         )}
                       </div>
-
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                        <span style={{ fontSize: '11px', color: isPanic ? 'var(--cd-danger)' : 'var(--cd-text-soft)' }}>
-                          {anomaly.date}
-                        </span>
+                        <span style={{ fontSize: '11px', color: isPanic ? 'var(--cd-danger)' : 'var(--cd-text-soft)' }}>{anomaly.date}</span>
                         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                          {hasWarnings && anomaly.warnings && (
-                            <WarningBadge warnings={anomaly.warnings} />
-                          )}
+                          {hasWarnings && anomaly.warnings && <WarningBadge warnings={anomaly.warnings} />}
                           {isPanic && (
-                            <button
-                              onClick={() => handleAcknowledge(anomaly.id)}
-                              style={{ padding: '6px 14px', backgroundColor: 'var(--cd-danger)', color: '#fff', fontSize: '12px', fontWeight: '600', borderRadius: '6px', border: '1px solid var(--cd-danger-border)', cursor: 'pointer' }}
-                            >
+                            <button onClick={() => handleAcknowledge(anomaly.id)} style={{ padding: '6px 14px', backgroundColor: 'var(--cd-danger)', color: '#fff', fontSize: '12px', fontWeight: '600', borderRadius: '6px', border: '1px solid var(--cd-danger-border)', cursor: 'pointer' }}>
                               ACKNOWLEDGE
                             </button>
                           )}
@@ -447,6 +421,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                   const colors = getStatusColor(anomaly.status);
                   const isPanic = anomaly.panic;
                   const hasWarnings = anomaly.warnings && anomaly.warnings.length > 0;
+                  const isExcessiveIdle = anomaly.status === 'Excessive Idle';
                   return (
                     <div
                       key={anomaly.id}
@@ -456,9 +431,9 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                         gap: '16px',
                         alignItems: 'center',
                         padding: '16px',
-                        backgroundColor: isPanic ? 'var(--cd-danger-bg)' : hasWarnings ? '#fffbeb' : 'var(--cd-surface)',
+                        backgroundColor: isPanic ? 'var(--cd-danger-bg)' : hasWarnings ? '#fffbeb' : isExcessiveIdle ? '#fefce8' : 'var(--cd-surface)',
                         borderRadius: '8px',
-                        border: `1px solid ${isPanic ? 'var(--cd-danger-border)' : hasWarnings ? '#fde68a' : 'var(--cd-border)'}`,
+                        border: `1px solid ${isPanic ? 'var(--cd-danger-border)' : hasWarnings ? '#fde68a' : isExcessiveIdle ? '#fcd34d' : 'var(--cd-border)'}`,
                         boxShadow: isPanic ? '0 6px 16px rgba(200, 16, 46, 0.28)' : 'var(--cd-soft-shadow)',
                         transition: 'all 0.3s ease-in-out',
                         position: 'relative',
@@ -466,16 +441,14 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                       }}
                     >
                       {isPanic && (
-                        <div style={{ position: 'absolute', top: '-8px', right: '12px', backgroundColor: 'var(--cd-danger)', color: '#fff', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 2px 8px rgba(200, 16, 46, 0.4)', animation: 'pulse 1.5s infinite' }}>
-                          !
-                        </div>
+                        <div style={{ position: 'absolute', top: '-8px', right: '12px', backgroundColor: 'var(--cd-danger)', color: '#fff', width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold', boxShadow: '0 2px 8px rgba(200, 16, 46, 0.4)', animation: 'pulse 1.5s infinite' }}>!</div>
                       )}
-                      <div style={{ fontSize: '14px', fontWeight: '600', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : 'var(--cd-text)' }}>{anomaly.regNo}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '500', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : 'var(--cd-accent-2)' }}>
-                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#d97706' : 'var(--cd-accent-2)' }}></span>
+                      <div style={{ fontSize: '14px', fontWeight: '600', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : isExcessiveIdle ? '#b45309' : 'var(--cd-text)' }}>{anomaly.regNo}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '500', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : isExcessiveIdle ? '#b45309' : 'var(--cd-accent-2)' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#d97706' : isExcessiveIdle ? '#b45309' : 'var(--cd-accent-2)' }}></span>
                         {anomaly.transporter}
                       </div>
-                      <div style={{ fontSize: '14px', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : 'var(--cd-text)' }}>{anomaly.assetName}</div>
+                      <div style={{ fontSize: '14px', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : isExcessiveIdle ? '#b45309' : 'var(--cd-text)' }}>{anomaly.assetName}</div>
                       <div>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '500', backgroundColor: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}>
                           <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: colors.text }}></span>
@@ -483,20 +456,11 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
-                        <span
-                          title={(anomaly as any).position?.address || 'Unknown'}
-                          style={{ fontSize: '13px', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : 'var(--cd-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', maxInlineSize: '160px' }}
-                        >
+                        <span title={(anomaly as any).position?.address || 'Unknown'} style={{ fontSize: '13px', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : 'var(--cd-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', maxInlineSize: '160px' }}>
                           {(anomaly as any).position?.address || 'Unknown'}
                         </span>
                         {(anomaly as any).position?.latitude && (
-                          <a href={`https://www.google.com/maps?q=${(anomaly as any).position.latitude},${(anomaly as any).position.longitude}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Open in Google Maps"
-                            style={{ flexShrink: 0, color: '#0d9488', lineHeight: 1, textDecoration: 'none' }}>
-                            📍
-                          </a>
+                          <a href={`https://www.google.com/maps?q=${(anomaly as any).position.latitude},${(anomaly as any).position.longitude}`} target="_blank" rel="noopener noreferrer" title="Open in Google Maps" style={{ flexShrink: 0, color: '#0d9488', lineHeight: 1, textDecoration: 'none' }}>📍</a>
                         )}
                       </div>
                       <div style={{ fontSize: '14px', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : 'var(--cd-text-muted)' }}>{anomaly.date}</div>
@@ -511,12 +475,8 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                             ACKNOWLEDGE
                           </button>
                         )}
-                        {hasWarnings && anomaly.warnings && (
-                          <WarningBadge warnings={anomaly.warnings} />
-                        )}
-                        {!isPanic && !hasWarnings && (
-                          <span style={{ fontSize: '13px', color: 'var(--cd-text-soft)' }}>—</span>
-                        )}
+                        {hasWarnings && anomaly.warnings && <WarningBadge warnings={anomaly.warnings} />}
+                        {!isPanic && !hasWarnings && <span style={{ fontSize: '13px', color: 'var(--cd-text-soft)' }}>—</span>}
                       </div>
                     </div>
                   );
@@ -546,14 +506,8 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
       </div>
 
       <style>{`
-        @keyframes flash {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.7; }
-        }
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.1); }
-        }
+        @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
       `}</style>
     </div>
   );

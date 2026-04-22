@@ -43,6 +43,8 @@ let cachedToken = null;
 let tokenExpiresAt = 0;
 
 const PANIC_EVENT_TYPE_ID = '-4444421556390778105';
+const IDLE_EVENT_TYPE_ID = '-3393530750645328945';
+const EXCESSIVE_IDLE_EVENT_TYPE_ID = '4650840888823746894';
 
 const WARNING_EVENT_TYPES = {
   '4750800303282680186': 'Harsh Braking',
@@ -54,6 +56,9 @@ const WARNING_EVENT_TYPES = {
 
 const triggeredEvents = new Map();
 const triggeredWarningEvents = new Map();
+
+const idleEventVehicles = new Set();
+const excessiveIdleVehicles = new Set();
 
 let driverLookup = new Map();
 let vehicleLookup = new Map();
@@ -106,31 +111,17 @@ async function fetchAndCacheDrivers(token) {
         "Accept": "application/json",
       },
     });
-
-    if (response.status === 401) {
-      console.log('⚠️ Token rejected by drivers endpoint');
-      return;
-    }
-    if (!response.ok) {
-      console.log(`⚠️ Drivers endpoint returned ${response.status}`);
-      return;
-    }
-
+    if (response.status === 401) { console.log('⚠️ Token rejected by drivers endpoint'); return; }
+    if (!response.ok) { console.log(`⚠️ Drivers endpoint returned ${response.status}`); return; }
     const text = await response.text();
     const safe = text.replace(/:\s*(-?\d{16,})/g, ': "$1"');
     const drivers = JSON.parse(safe);
-
     const driversPath = path.join(process.cwd(), 'public', 'drivers.json');
     fs.writeFileSync(driversPath, JSON.stringify(drivers, null, 2));
-
     driverLookup.clear();
     drivers.forEach(d => {
-      driverLookup.set(d.DriverId?.toString(), {
-        name: d.Name || 'N/A',
-        phone: d.MobileNumber || 'N/A',
-      });
+      driverLookup.set(d.DriverId?.toString(), { name: d.Name || 'N/A', phone: d.MobileNumber || 'N/A' });
     });
-
     lastDriverFetch = Date.now();
     console.log(`👥 Drivers cached — ${drivers.length} drivers saved to drivers.json`);
   } catch (err) {
@@ -147,28 +138,17 @@ async function fetchAndCacheVehicles(token) {
         "Accept": "application/json",
       },
     });
-
-    if (response.status === 401) {
-      console.log('⚠️ Token rejected by vehicles endpoint');
-      return;
-    }
-    if (!response.ok) {
-      console.log(`⚠️ Vehicles endpoint returned ${response.status}`);
-      return;
-    }
-
+    if (response.status === 401) { console.log('⚠️ Token rejected by vehicles endpoint'); return; }
+    if (!response.ok) { console.log(`⚠️ Vehicles endpoint returned ${response.status}`); return; }
     const text = await response.text();
     const safe = text.replace(/:\s*(-?\d{16,})/g, ': "$1"');
     const vehicles = JSON.parse(safe);
-
     const vehiclesPath = path.join(process.cwd(), 'public', 'vehicles.json');
     fs.writeFileSync(vehiclesPath, JSON.stringify(vehicles, null, 2));
-
     vehicleLookup.clear();
     vehicles.forEach(v => {
       vehicleLookup.set(v.AssetId?.toString(), v);
     });
-
     lastVehicleFetch = Date.now();
     console.log(`🚗 Vehicles cached — ${vehicles.length} vehicles saved to vehicles.json`);
   } catch (err) {
@@ -187,12 +167,7 @@ async function reverseGeocode(lat, lon) {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
-      {
-        headers: {
-          'User-Agent': 'BPL-CNL-FleetDashboard/1.0',
-          'Accept-Language': 'en'
-        }
-      }
+      { headers: { 'User-Agent': 'BPL-CNL-FleetDashboard/1.0', 'Accept-Language': 'en' } }
     );
     if (!res.ok) return null;
     const data = await res.json();
@@ -251,6 +226,8 @@ export function getWarningEvents() {
 export function resetState() {
   triggeredEvents.clear();
   triggeredWarningEvents.clear();
+  idleEventVehicles.clear();
+  excessiveIdleVehicles.clear();
   activeSinceToken = getCurrentSinceToken();
   activeParseRetryDone = false;
   cachedToken = null;
@@ -260,10 +237,7 @@ export function resetState() {
 
 async function authenticate() {
   const now = Date.now();
-
-  if (cachedToken && now < tokenExpiresAt - 60000) {
-    return cachedToken;
-  }
+  if (cachedToken && now < tokenExpiresAt - 60000) return cachedToken;
 
   const params = new URLSearchParams({
     grant_type: "password",
@@ -281,7 +255,6 @@ async function authenticate() {
   });
 
   const contentType = response.headers.get("content-type");
-
   if (!contentType || !contentType.includes("application/json")) {
     cachedToken = null;
     tokenExpiresAt = 0;
@@ -291,11 +264,9 @@ async function authenticate() {
 
   const data = await response.json();
   if (!data.access_token) throw new Error("No access token in response");
-
   cachedToken = data.access_token;
   tokenExpiresAt = now + (data.expires_in * 1000);
   console.log(`🔑 New token cached, expires in ${data.expires_in}s`);
-
   return cachedToken;
 }
 
@@ -309,10 +280,8 @@ async function getLatestPositions(token) {
     },
     body: `[${process.env.CHEVRON_ORG_ID}]`,
   });
-
   if (response.status === 401) {
-    cachedToken = null;
-    tokenExpiresAt = 0;
+    cachedToken = null; tokenExpiresAt = 0;
     console.log('⚠️ Token rejected by positions endpoint, will re-authenticate next poll');
     return [];
   }
@@ -324,7 +293,6 @@ async function getLatestPositions(token) {
 
 async function getActivePanicEvents(token) {
   const endpoint = `${API_BASE}/activeevents/groups/createdsince/organisation/${CHEVRON_ORG_ID}/sincetoken/NEW/quantity/1000`;
-
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -334,15 +302,12 @@ async function getActivePanicEvents(token) {
     },
     body: `["-4444421556390778105"]`,
   });
-
   if (response.status === 401) {
-    cachedToken = null;
-    tokenExpiresAt = 0;
+    cachedToken = null; tokenExpiresAt = 0;
     console.log('⚠️ Token rejected by panic events endpoint, will re-authenticate next poll');
     return [];
   }
   if (response.status === 204 || !response.ok) return [];
-
   const text = await response.text();
   const safe = text.replace(/:\s*(-?\d{16,})/g, ': "$1"');
   return JSON.parse(safe);
@@ -350,7 +315,6 @@ async function getActivePanicEvents(token) {
 
 async function getLatestActiveEvents(token) {
   const endpoint = `${API_BASE}/activeevents/groups/createdsince/entitytype/Asset/sincetoken/${activeSinceToken}/quantity/1000`;
-
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
@@ -360,10 +324,8 @@ async function getLatestActiveEvents(token) {
     },
     body: `[${CHEVRON_ORG_ID}]`,
   });
-
   if (response.status === 401) {
-    cachedToken = null;
-    tokenExpiresAt = 0;
+    cachedToken = null; tokenExpiresAt = 0;
     console.log('⚠️ Token rejected by latest active events endpoint, will re-authenticate next poll');
     return [];
   }
@@ -384,18 +346,12 @@ async function getLatestActiveEvents(token) {
     }
     console.log('⚠️ Active events parse failed again, advancing activeSinceToken and moving on.');
     activeParseRetryDone = false;
-    if (newToken) {
-      activeSinceToken = newToken;
-      console.log(`📌 Updated activeSinceToken: ${activeSinceToken}`);
-    }
+    if (newToken) { activeSinceToken = newToken; console.log(`📌 Updated activeSinceToken: ${activeSinceToken}`); }
     return [];
   }
 
   activeParseRetryDone = false;
-  if (newToken) {
-    activeSinceToken = newToken;
-    console.log(`📌 Updated activeSinceToken: ${activeSinceToken}`);
-  }
+  if (newToken) { activeSinceToken = newToken; console.log(`📌 Updated activeSinceToken: ${activeSinceToken}`); }
 
   const eventsLogPath = path.join(process.cwd(), 'events.log');
 
@@ -425,13 +381,34 @@ async function getLatestActiveEvents(token) {
     }).join('\n') + '\n';
     fs.appendFileSync(logPath, logEntries);
     console.log(`📝 Panic logged to panic.log`);
-
     panicEvents.forEach(e => {
       if (!e.Position?.FormattedAddress && e.Position?.Latitude && e.Position?.Longitude) {
         enrichEntryWithAddress(logPath, e.EventId, e.Position.Latitude, e.Position.Longitude);
       }
     });
   }
+
+  // Handle idle events — repopulate set each poll from current active events
+  idleEventVehicles.clear();
+  const idleEvents = parsed.filter(e => e.EventTypeId === IDLE_EVENT_TYPE_ID);
+  idleEvents.forEach(e => {
+    const assetId = e.AssetId?.toString();
+    if (assetId) {
+      idleEventVehicles.add(assetId);
+      console.log(`😴 Idle event - AssetId: ${assetId}`);
+    }
+  });
+
+  // Handle excessive idle events — repopulate set each poll
+  excessiveIdleVehicles.clear();
+  const excessiveIdleEvents = parsed.filter(e => e.EventTypeId === EXCESSIVE_IDLE_EVENT_TYPE_ID);
+  excessiveIdleEvents.forEach(e => {
+    const assetId = e.AssetId?.toString();
+    if (assetId) {
+      excessiveIdleVehicles.add(assetId);
+      console.log(`🔴 Excessive idle - AssetId: ${assetId}`);
+    }
+  });
 
   // Handle warning events
   const warningEvents = parsed.filter(e => WARNING_EVENT_TYPES[e.EventTypeId]);
@@ -469,9 +446,7 @@ async function getLatestActiveEvents(token) {
       const label = WARNING_EVENT_TYPES[e.EventTypeId];
       console.log(`⚠️ ${label} - AssetId: ${assetId} | EventTime: ${e.EventDateTime}`);
       if (assetId) {
-        if (!triggeredWarningEvents.has(assetId)) {
-          triggeredWarningEvents.set(assetId, []);
-        }
+        if (!triggeredWarningEvents.has(assetId)) triggeredWarningEvents.set(assetId, []);
         const existing = triggeredWarningEvents.get(assetId);
         const alreadyStored = existing.some(ev => ev.eventId === e.EventId);
         if (!alreadyStored) {
@@ -503,17 +478,21 @@ function mergeData(positions) {
     const hasPanic = vehicleEvents.some(e => e.EventTypeId === PANIC_EVENT_TYPE_ID);
     const warningEvents = triggeredWarningEvents.get(assetId) || [];
 
+    const hasExcessiveIdleEvent = excessiveIdleVehicles.has(assetId);
+    const hasIdleEvent = idleEventVehicles.has(assetId);
+
     let status = 'Offline';
+
     if (pos) {
       if (pos.SpeedKilometresPerHour > 5) {
         status = 'Moving';
-      } else if (pos.SpeedKilometresPerHour > 3 && pos.SpeedKilometresPerHour <= 5) {
+      } else if (hasExcessiveIdleEvent) {
+        status = 'Excessive Idle';
+      } else if (hasIdleEvent) {
         status = 'Idle';
       } else {
         const age = Date.now() - new Date(pos.Timestamp).getTime();
-        if (age < 5 * 60 * 1000) {
-          status = 'Idle';
-        } else if (age < 60 * 60 * 1000) {
+        if (age < 60 * 60 * 1000) {
           status = 'Stationary';
         } else if (age < 24 * 60 * 60 * 1000) {
           status = 'Parked';
@@ -565,12 +544,10 @@ export async function pollOnce() {
       const token = await authenticate();
       console.log("✅ Authenticated");
 
-      // Refresh drivers weekly
       if (driverLookup.size === 0 || Date.now() - lastDriverFetch > DRIVER_REFRESH_INTERVAL_MS) {
         await fetchAndCacheDrivers(token);
       }
 
-      // Refresh vehicles weekly
       if (vehicleLookup.size === 0 || Date.now() - lastVehicleFetch > VEHICLE_REFRESH_INTERVAL_MS) {
         await fetchAndCacheVehicles(token);
       }
@@ -586,14 +563,10 @@ export async function pollOnce() {
         if (event.EventTypeId === PANIC_EVENT_TYPE_ID) {
           const assetId = event.AssetId?.toString();
           if (assetId) {
-            if (!triggeredEvents.has(assetId)) {
-              triggeredEvents.set(assetId, []);
-            }
+            if (!triggeredEvents.has(assetId)) triggeredEvents.set(assetId, []);
             const existing = triggeredEvents.get(assetId);
             const alreadyStored = existing.some(e => e.EventId === event.EventId);
-            if (!alreadyStored) {
-              existing.push(event);
-            }
+            if (!alreadyStored) existing.push(event);
           }
         }
       });
@@ -609,6 +582,7 @@ export async function pollOnce() {
         panic: merged.filter(v => v.panic).length,
         moving: merged.filter(v => v.status === 'Moving').length,
         idle: merged.filter(v => v.status === 'Idle').length,
+        excessiveIdle: merged.filter(v => v.status === 'Excessive Idle').length,
         stationary: merged.filter(v => v.status === 'Stationary').length,
         parked: merged.filter(v => v.status === 'Parked').length,
         inactive: merged.filter(v => v.status === 'Inactive').length,
@@ -628,15 +602,13 @@ export async function pollOnce() {
       };
       fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2));
 
-      console.log(`📊 Panic: ${stats.panic} | Warnings: ${stats.warnings} | Moving: ${stats.moving} | Idle: ${stats.idle} | Stationary: ${stats.stationary} | Parked: ${stats.parked} | Inactive: ${stats.inactive} | Offline: ${stats.offline}`);
+      console.log(`📊 Panic: ${stats.panic} | Warnings: ${stats.warnings} | Moving: ${stats.moving} | Idle: ${stats.idle} | Excessive Idle: ${stats.excessiveIdle} | Stationary: ${stats.stationary} | Parked: ${stats.parked} | Inactive: ${stats.inactive} | Offline: ${stats.offline}`);
       console.log("💾 Saved to data.json");
 
       if (stats.panic > 0) {
         console.log("\n🚨 PANIC ALERT DETECTED! 🚨");
         const panicVehicles = merged.filter(v => v.panic);
-        panicVehicles.forEach(v => {
-          console.log(`   ${v.regNo} - ${v.assetName}`);
-        });
+        panicVehicles.forEach(v => console.log(`   ${v.regNo} - ${v.assetName}`));
       }
 
       if (stats.warnings > 0) {
