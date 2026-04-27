@@ -23,14 +23,10 @@ const COLUMNS = [
   { header: 'Event', get: (e: any) => e.label || 'Panic' },
   { header: 'Event Time', get: (e: any) => e.eventTime ? new Date(e.eventTime).toLocaleString('en-GB') : 'N/A' },
   { header: 'Location', get: (e: any) => {
-    if (e.address && e.address !== 'N/A' && e.address !== 'null') return e.address;
-    const addr = e.rawEvent?.Position?.FormattedAddress;
-    if (addr && addr !== 'null') return addr;
-    const lat = e.rawEvent?.Position?.Latitude;
-    const lng = e.rawEvent?.Position?.Longitude;
-    if (lat && lng) return `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`;
-    return 'N/A';
-  }},
+  if (e.address && e.address !== 'N/A' && e.address !== 'null') return e.address;
+  if (e.latitude && e.longitude) return `${Number(e.latitude).toFixed(5)}, ${Number(e.longitude).toFixed(5)}`;
+  return 'N/A';
+}},
 ];
 
 // Columns where values must be forced as text in CSV/Excel (phone numbers, large IDs)

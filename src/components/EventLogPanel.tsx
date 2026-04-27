@@ -386,9 +386,9 @@ export default function EventLogPanel({ open, onClose, authFetch, isMobile }: Pr
             ) : filtered.map((entry, i) => {
               const isPanic = entry.type === 'panic';
               const label = entry.label || 'Panic';
-              const address = entry.address && entry.address !== 'null'
+             const address = entry.address && entry.address !== 'null' && entry.address !== 'N/A'
                 ? entry.address
-                : entry.rawEvent?.Position?.FormattedAddress || '';
+                : '';
               const displayName = entry.regNo && entry.regNo !== 'N/A' ? entry.regNo : entry.assetId;
               const hasDriver = entry.driverName && entry.driverName !== 'N/A' && entry.driverName !== 'No Driver Assigned';
               return (
