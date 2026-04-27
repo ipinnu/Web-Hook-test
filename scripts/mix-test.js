@@ -1,4 +1,3 @@
-//start
 import * as dotenv from 'dotenv';
 dotenv.config();
 
@@ -375,8 +374,9 @@ async function getLatestActiveEvents(token) {
         eventId: e.EventId,
         eventTime: e.EventDateTime,
         receivedAt: e.ReceivedDateTime,
+        latitude: e.Position?.Latitude || null,
+        longitude: e.Position?.Longitude || null,
         address: formattedAddress || null,
-        rawEvent: e
       });
     }).join('\n') + '\n';
     fs.appendFileSync(logPath, logEntries);
@@ -388,7 +388,7 @@ async function getLatestActiveEvents(token) {
     });
   }
 
-  // Handle idle events — repopulate set each poll from current active events
+  // Handle idle events
   idleEventVehicles.clear();
   const idleEvents = parsed.filter(e => e.EventTypeId === IDLE_EVENT_TYPE_ID);
   idleEvents.forEach(e => {
@@ -399,7 +399,7 @@ async function getLatestActiveEvents(token) {
     }
   });
 
-  // Handle excessive idle events — repopulate set each poll
+  // Handle excessive idle events
   excessiveIdleVehicles.clear();
   const excessiveIdleEvents = parsed.filter(e => e.EventTypeId === EXCESSIVE_IDLE_EVENT_TYPE_ID);
   excessiveIdleEvents.forEach(e => {
@@ -428,8 +428,9 @@ async function getLatestActiveEvents(token) {
         label: WARNING_EVENT_TYPES[e.EventTypeId],
         eventTime: e.EventDateTime,
         receivedAt: e.ReceivedDateTime,
+        latitude: e.Position?.Latitude || null,
+        longitude: e.Position?.Longitude || null,
         address: formattedAddress || null,
-        rawEvent: e
       });
     }).join('\n') + '\n';
     fs.appendFileSync(eventsLogPath, logEntries);
@@ -484,14 +485,17 @@ function mergeData(positions) {
     let status = 'Offline';
 
     if (pos) {
-      if (pos.SpeedKilometresPerHour > 5) {
+      const tsMs = new Date(pos.Timestamp).getTime();
+      const posAge = isNaN(tsMs) ? 0 : Date.now() - tsMs;
+
+      if (pos.SpeedKilometresPerHour > 5 && posAge < 5 * 60 * 1000) {
         status = 'Moving';
       } else if (hasExcessiveIdleEvent) {
         status = 'Excessive Idle';
       } else if (hasIdleEvent) {
         status = 'Idle';
       } else {
-        const age = Date.now() - new Date(pos.Timestamp).getTime();
+        const age = isNaN(tsMs) ? Infinity : Date.now() - tsMs;
         if (age < 60 * 60 * 1000) {
           status = 'Stationary';
         } else if (age < 24 * 60 * 60 * 1000) {
@@ -512,9 +516,7 @@ function mergeData(positions) {
       make: vehicle.Make || 'N/A',
       model: vehicle.Model || 'N/A',
       status,
-      date: pos?.Timestamp
-        ? new Date(pos.Timestamp).toLocaleString('en-GB')
-        : new Date().toLocaleString('en-GB'),
+      date: pos?.Timestamp || new Date().toISOString(),
       panic: hasPanic,
       warnings: warningEvents,
       position: pos ? {
@@ -537,7 +539,7 @@ export async function pollOnce() {
     cleanStaleWarnings();
 
     console.log("\n" + "=".repeat(70));
-    console.log(`RUN #${runCount} of ${pollingMaxRuns ?? "∞"} - ${new Date().toLocaleString('en-GB')}`);
+    console.log(`RUN #${runCount} of ${pollingMaxRuns ?? "∞"} - ${new Date().toLocaleString('en-GB', { timeZone: 'Africa/Lagos' })}`);
     console.log("=".repeat(70));
 
     try {

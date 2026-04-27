@@ -29,7 +29,7 @@ interface Props {
 }
 
 const ITEMS_PER_PAGE = 50;
-const STALE_THRESHOLD_MS = 30_000;
+const STALE_THRESHOLD_MS = 60_000;
 const WARNING_CLEAR_MS = 60_000;
 
 function getUniqueWarningLabels(warnings: Warning[]): string[] {
@@ -95,6 +95,21 @@ function WarningBadge({ warnings }: { warnings: Warning[] }) {
     </div>
   );
 }
+
+const formatDate = (dateStr: string) => {
+  try {
+    return new Date(dateStr).toLocaleString('en-GB', {
+      timeZone: 'Africa/Lagos',
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return dateStr;
+  }
+};
 
 export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch }: Props) {
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
@@ -289,7 +304,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
           <div style={{ backgroundColor: '#fefce8', border: '1px solid #fde047', borderRadius: '8px', padding: '12px 20px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <WifiOff style={{ width: '18px', height: '18px', color: '#ca8a04', flexShrink: 0 }} />
             <span style={{ fontSize: '14px', color: '#854d0e', fontWeight: '500' }}>
-              ⚠️ Connection interrupted — attempting to reconnect...
+              ⚠️ Live data temporarily paused — will resume automatically
             </span>
           </div>
         )}
@@ -306,7 +321,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--cd-text-muted)', fontSize: '13px', marginTop: '10px', paddingLeft: '4px' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                 <span style={{ width: '8px', height: '8px', borderRadius: '999px', background: isStale ? '#ca8a04' : 'var(--cd-accent)', boxShadow: isStale ? '0 0 0 4px rgba(202,138,4,0.2)' : '0 0 0 4px var(--cd-accent-soft)' }}></span>
-                {isStale ? 'Reconnecting...' : 'Live — auto-refresh every 10s'}
+                {isStale ? 'Temporarily paused...' : 'Live — auto-refresh every 10s'}
               </span>
             </div>
           </div>
@@ -403,7 +418,9 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                         )}
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                        <span style={{ fontSize: '11px', color: isPanic ? 'var(--cd-danger)' : 'var(--cd-text-soft)' }}>{anomaly.date}</span>
+                        <span style={{ fontSize: '11px', color: isPanic ? 'var(--cd-danger)' : 'var(--cd-text-soft)' }}>
+                          {formatDate(anomaly.date)}
+                        </span>
                         <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
                           {hasWarnings && anomaly.warnings && <WarningBadge warnings={anomaly.warnings} />}
                           {isPanic && (
@@ -463,7 +480,9 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                           <a href={`https://www.google.com/maps?q=${(anomaly as any).position.latitude},${(anomaly as any).position.longitude}`} target="_blank" rel="noopener noreferrer" title="Open in Google Maps" style={{ flexShrink: 0, color: '#0d9488', lineHeight: 1, textDecoration: 'none' }}>📍</a>
                         )}
                       </div>
-                      <div style={{ fontSize: '14px', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : 'var(--cd-text-muted)' }}>{anomaly.date}</div>
+                      <div style={{ fontSize: '14px', color: isPanic ? 'var(--cd-danger)' : hasWarnings ? '#854F0B' : 'var(--cd-text-muted)' }}>
+                        {formatDate(anomaly.date)}
+                      </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
                         {isPanic && (
                           <button
