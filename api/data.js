@@ -1,6 +1,6 @@
-const { fetchVehicleData } = require('./_lib/mix');
+import { fetchVehicleData } from './_lib/mix.js';
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   if (req.headers['x-api-secret'] !== process.env.API_SECRET) {
     return res.status(401).end('Unauthorized');
   }
@@ -10,4 +10,4 @@ module.exports = async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-};
+}

@@ -1,6 +1,3 @@
-// Shared MiX API helpers for Vercel serverless functions
-// In-memory token cache — reused across warm invocations
-
 const IDENTITY_URL = 'https://identity.za.mixtelematics.com/core/connect/token';
 const API_BASE = 'https://integrate.za.mixtelematics.com/api';
 
@@ -44,7 +41,7 @@ function flattenSites(node, zoneName = null) {
   const isRoot = type === 'OrganisationGroup';
   const isZone = type === 'OrganisationSubGroup';
   const isSite = type === 'SiteGroup' || type === 'DefaultSite';
-  const currentZone = isRoot ? null : isZone ? node.Name : zoneName || node.Name;
+  const currentZone = isRoot ? null : isZone ? node.Name : (zoneName || node.Name);
   if (isSite || isZone) {
     map.set(node.GroupId?.toString(), { name: node.Name, zoneName: currentZone || node.Name });
   }
@@ -65,7 +62,7 @@ const WARNING_TYPES = {
   '4291175374538259638': 'Harsh Cornering',
 };
 
-async function fetchVehicleData() {
+export async function fetchVehicleData() {
   const token = await authenticate();
   const orgId = process.env.JMG_ORG_ID;
   const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
@@ -156,5 +153,3 @@ async function fetchVehicleData() {
     };
   });
 }
-
-module.exports = { authenticate, fetchVehicleData };
