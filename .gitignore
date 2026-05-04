@@ -69,3 +69,4 @@ panic.log
 events.log
 backfill.js
 enrich.js
+.vercel
