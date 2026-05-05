@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SignedIn, SignedOut, SignIn, useClerk } from '@clerk/clerk-react';
 import { Moon, Sun, Power, RotateCcw, ScrollText, Download, Map, Table, ShieldAlert, Truck, Navigation, MapPin, LayoutGrid } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import AnomaliesTable from './components/AnomaliesTable';
@@ -57,6 +58,7 @@ const authFetch = (url: string, options: RequestInit = {}) => {
 
 
 function DashboardContent() {
+  const { signOut } = useClerk();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('All');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -162,7 +164,7 @@ function DashboardContent() {
                 </div>
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
                   <button onClick={() => setShowLogoutConfirm(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid var(--cd-border)', backgroundColor: 'var(--cd-surface-2)', color: 'var(--cd-text)', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>Cancel</button>
-                  <button onClick={() => {}} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#c8102e', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>Log Out</button>
+                  <button onClick={() => signOut()} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', backgroundColor: '#c8102e', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>Log Out</button>
                 </div>
               </div>
             </div>
@@ -337,5 +339,52 @@ function DashboardContent() {
 }
 
 export default function App() {
-  return <DashboardContent />;
+  return (
+    <>
+      <SignedOut>
+        <div className="signin-bg">
+          <div className="glow-orb glow-orb-1" />
+          <div className="glow-orb glow-orb-2" />
+          <div className="glow-orb glow-orb-3" />
+          <svg style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', zIndex: 3, pointerEvents: 'none', opacity: 0.20 }} aria-hidden="true">
+            <filter id="signin-noise">
+              <feTurbulence type="fractalNoise" baseFrequency="0.78" numOctaves="4" stitchTiles="stitch" />
+              <feColorMatrix type="saturate" values="0" />
+            </filter>
+            <rect width="100%" height="100%" filter="url(#signin-noise)" />
+          </svg>
+          <div className="signin-card-wrap">
+            <SignIn
+              appearance={{
+                layout: {
+                  logoImageUrl: '/JMG.avif',
+                  logoLinkUrl: '/',
+                },
+                variables: {
+                  colorPrimary: '#F05022',
+                  colorBackground: '#ffffff',
+                  colorText: '#1a1a1a',
+                  borderRadius: '14px',
+                  fontFamily: 'inherit',
+                },
+                elements: {
+                  card: {
+                    boxShadow: '0 8px 48px rgba(240,80,34,0.12), 0 2px 16px rgba(0,0,0,0.06)',
+                    border: '1px solid rgba(240,80,34,0.08)',
+                  },
+                  logoBox: { height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
+                  logoImage: { width: '140px', height: '100px', objectFit: 'contain', borderRadius: '10px' },
+                  formButtonPrimary: { backgroundColor: '#F05022', borderRadius: '8px', fontWeight: '600' },
+                  footerAction: { display: 'none' },
+                },
+              }}
+            />
+          </div>
+        </div>
+      </SignedOut>
+      <SignedIn>
+        <DashboardContent />
+      </SignedIn>
+    </>
+  );
 }

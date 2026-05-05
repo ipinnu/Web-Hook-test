@@ -70,6 +70,88 @@
   50% { opacity: 0.5; }
 }
 
+@keyframes glow-drift-1 {
+  0%   { transform: translate(0px, 0px) scale(1);       opacity: 0.75; }
+  33%  { transform: translate(320px, 160px) scale(1.1); opacity: 0.9; }
+  66%  { transform: translate(120px, 380px) scale(1.05); opacity: 0.7; }
+  100% { transform: translate(0px, 0px) scale(1);       opacity: 0.75; }
+}
+@keyframes glow-drift-2 {
+  0%   { transform: translate(0px, 0px) scale(1);        opacity: 0.7; }
+  33%  { transform: translate(-280px, 120px) scale(1.12); opacity: 0.85; }
+  66%  { transform: translate(-100px, -200px) scale(1.0); opacity: 0.75; }
+  100% { transform: translate(0px, 0px) scale(1);        opacity: 0.7; }
+}
+@keyframes glow-drift-3 {
+  0%   { transform: translate(0px, 0px) scale(1);         opacity: 0.65; }
+  33%  { transform: translate(80px, -260px) scale(1.08);  opacity: 0.8; }
+  66%  { transform: translate(-220px, -120px) scale(1.15); opacity: 0.7; }
+  100% { transform: translate(0px, 0px) scale(1);         opacity: 0.65; }
+}
+
+@keyframes fade-up-in {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.signin-bg {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+
+.signin-bg > .glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.signin-bg > .glow-orb-1 {
+  width: 620px; height: 620px;
+  top: -200px; left: -180px;
+  background: radial-gradient(circle, rgba(240,80,34,0.55) 0%, rgba(240,80,34,0.18) 50%, transparent 70%);
+  animation: glow-drift-1 20s ease-in-out infinite;
+  filter: blur(50px);
+}
+.signin-bg > .glow-orb-2 {
+  width: 580px; height: 580px;
+  bottom: -180px; right: -160px;
+  background: radial-gradient(circle, rgba(240,80,34,0.52) 0%, rgba(240,80,34,0.16) 50%, transparent 70%);
+  animation: glow-drift-2 24s ease-in-out infinite;
+  filter: blur(54px);
+}
+.signin-bg > .glow-orb-3 {
+  width: 480px; height: 480px;
+  top: -100px; right: -120px;
+  background: radial-gradient(circle, rgba(240,80,34,0.45) 0%, rgba(240,80,34,0.14) 50%, transparent 70%);
+  animation: glow-drift-3 28s ease-in-out infinite;
+  filter: blur(46px);
+}
+
+
+.signin-card-wrap {
+  position: relative;
+  z-index: 2;
+  opacity: 0;
+  animation: fade-up-in 0.9s cubic-bezier(0.22,1,0.36,1) 0.2s forwards;
+}
+
+/* Hide Clerk dev mode banner */
+.cl-badge,
+[class*="cl-badge"],
+[class*="cl-devMode"],
+[class*="cl-development"],
+.cl-rootBox > div:not(.cl-card):not([class*="cl-signIn"]):not([class*="cl-signUp"]) {
+  display: none !important;
+}
+
+
 @keyframes flash {
   0%, 100% { 
     background-color: #fef2f2;
