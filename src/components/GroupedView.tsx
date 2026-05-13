@@ -35,7 +35,7 @@ const STATUS: Record<StatusType, { color: string; bg: string; dot: string; label
   'Excessive Idle': { color: '#B06230', bg: 'rgba(176,98,48,0.12)',  dot: '#B06230', label: 'Exc. Idle' },
   'Stationary':     { color: '#4D7FA0', bg: 'rgba(77,127,160,0.12)', dot: '#4D7FA0', label: 'Stationary' },
   'Parked':         { color: '#7C3AED', bg: 'rgba(124,58,237,0.12)', dot: '#7C3AED', label: 'Parked' },
-  'Offline':        { color: '#6B7A8D', bg: 'rgba(107,122,141,0.1)', dot: '#6B7A8D', label: 'Offline' },
+  'Offline':        { color: '#6B7A8D', bg: 'rgba(107,122,141,0.1)', dot: '#6B7A8D', label: 'Temp. Inactive' },
   'Inactive':       { color: '#6878A0', bg: 'rgba(104,120,160,0.1)', dot: '#6878A0', label: 'Inactive' },
 };
 
@@ -43,10 +43,13 @@ const STATUS_PRIORITY: Record<StatusType, number> = {
   'Moving': 7, 'Idle': 6, 'Excessive Idle': 5, 'Stationary': 4, 'Parked': 3, 'Offline': 2, 'Inactive': 1,
 };
 
-// Geography → site name mapping
+// Site menu options
 const GEO: Record<string, string[] | null> = {
-  'All Locations': null,
-  'Lagos': ['NBL', 'Hiabs Logistics', 'Closed Body Logistics', 'HAULAGE', 'Port Logistics', 'Closed Body-Interstate', 'Flat Trucks Logistics', 'Light Fleet JMG', 'Default Site'],
+  'All Sites': null,
+  'NBL': ['NBL'],
+  'HAULAGE': ['HAULAGE'],
+  'Light Fleet JMG': ['Light Fleet JMG'],
+  'Hiabs Logistics': ['Hiabs Logistics'],
   'Abuja': ['Abuja'],
   'Port Harcourt': ['PH'],
 };
@@ -245,7 +248,7 @@ export default function GroupedView({ statusFilter, authFetch }: Props) {
   const [loading, setLoading] = useState(true);
   const [isStale, setIsStale] = useState(false);
   const [search, setSearch] = useState('');
-  const [geo, setGeo] = useState<string>('All Locations');
+  const [geo, setGeo] = useState<string>('All Sites');
   const [allOpen, setAllOpen] = useState(true);
   const warningTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastSuccess = useRef<number>(Date.now());
@@ -366,17 +369,26 @@ export default function GroupedView({ statusFilter, authFetch }: Props) {
             />
           </div>
 
-          {/* Geography dropdown */}
-          <div className="gv-select-wrap">
-            <select
-              className="gv-select"
-              value={geo}
-              onChange={e => setGeo(e.target.value)}
-            >
-              {Object.keys(GEO).map(g => (
-                <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
+          {/* Site Menu */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--cd-text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginRight: '2px' }}>Site</span>
+            {Object.keys(GEO).map(g => (
+              <button
+                key={g}
+                onClick={() => setGeo(g)}
+                style={{
+                  fontSize: '12px', fontWeight: geo === g ? '700' : '500',
+                  padding: '5px 12px', borderRadius: '999px', cursor: 'pointer',
+                  border: `1px solid ${geo === g ? '#F05022' : 'var(--cd-border)'}`,
+                  background: geo === g ? '#F05022' : 'var(--cd-surface)',
+                  color: geo === g ? '#ffffff' : 'var(--cd-text-muted)',
+                  transition: 'all 0.15s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {g}
+              </button>
+            ))}
           </div>
 
           {/* Right side */}

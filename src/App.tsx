@@ -40,7 +40,7 @@ const statConfig: {
   { key: 'idle',          label: 'Idle',            filter: 'Idle',           color: '#A07830', bg: '#FAF5E8', border: '#E2CFA0', tooltip: 'Vehicle is idling',                                    tier: 2 },
   { key: 'excessiveIdle', label: 'Excess Idle',     filter: 'Excessive Idle', color: '#B06230', bg: '#F7EDDF', border: '#D9A876', tooltip: 'Vehicle has been idling excessively',                  tier: 2 },
   { key: 'stationary',    label: 'Stationary',      filter: 'Stationary',     color: '#4D7FA0', bg: '#EEF4F8', border: '#A4C0D8', tooltip: 'Vehicle has been stationary for less than 1 hour',    tier: 2 },
-  { key: 'offline',       label: 'Offline',         filter: 'Offline',        color: '#6B7A8D', bg: '#EFF2F5', border: '#C0C8D4', tooltip: 'Vehicle has not moved in over 24 hours',              tier: 2 },
+  { key: 'offline',       label: 'Temp. Inactive',  filter: 'Offline',        color: '#6B7A8D', bg: '#EFF2F5', border: '#C0C8D4', tooltip: 'Vehicle has not reported activity in over 24 hours',  tier: 2 },
   { key: 'inactive',      label: 'Inactive',        filter: 'Inactive',       color: '#6878A0', bg: '#EEF0F8', border: '#B4BCD4', tooltip: 'Vehicle has not moved in over 30 days',               tier: 2 },
 ];
 

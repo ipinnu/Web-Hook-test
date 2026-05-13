@@ -30,6 +30,9 @@ interface Props {
   authFetch: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
+const STATUS_LABELS: Partial<Record<string, string>> = { 'Offline': 'Temp. Inactive' };
+const statusLabel = (s: string) => STATUS_LABELS[s] ?? s;
+
 const ITEMS_PER_PAGE = 50;
 const STALE_THRESHOLD_MS = 60_000;
 const WARNING_CLEAR_MS = 60_000;
@@ -408,7 +411,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                         </span>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px', borderRadius: '9999px', fontSize: '11px', fontWeight: '500', backgroundColor: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, flexShrink: 0 }}>
                           <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: colors.text }}></span>
-                          {anomaly.status}
+                          {statusLabel(anomaly.status)}
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '6px' }}>
@@ -471,7 +474,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                       <div>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '9999px', fontSize: '12px', fontWeight: '500', backgroundColor: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}>
                           <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: colors.text }}></span>
-                          {anomaly.status}
+                          {statusLabel(anomaly.status)}
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
