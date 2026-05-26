@@ -1,5 +1,5 @@
 import * as dotenv from 'dotenv';
-dotenv.config();
+dotenv.config({ path: ['.env.local', '.env'] });
 
 import fetch from "node-fetch";
 import fs from "fs";
@@ -23,6 +23,8 @@ const MAX_RUNS = 1200;
 const DRIVER_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const VEHICLE_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const SITE_REFRESH_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+const TRIPS_SESSION_FILE = path.join(process.cwd(), 'public', 'trips-session.json');
+const TRIPS_LOG_FILE = path.join(process.cwd(), 'public', 'trips.log');
 
 let runCount = 0;
 let inFlight = null;
@@ -32,13 +34,21 @@ let lastDriverFetch = 0;
 let lastVehicleFetch = 0;
 let lastSiteFetch = 0;
 
-function getCurrentSinceToken() {
-  const now = new Date();
+function getSinceTokenForDate(date) {
   const pad = (n, len = 2) => String(n).padStart(len, '0');
-  return `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}000`;
+  return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}000`;
+}
+
+function getCurrentSinceToken() {
+  return getSinceTokenForDate(new Date());
+}
+
+function getTripsInitialSinceToken() {
+  return getSinceTokenForDate(new Date(Date.now() - 24 * 60 * 60 * 1000));
 }
 
 let activeSinceToken = getCurrentSinceToken();
+let tripSinceToken = getTripsInitialSinceToken();
 let activeParseRetryDone = false;
 let cachedToken = null;
 let tokenExpiresAt = 0;
@@ -57,6 +67,8 @@ const WARNING_EVENT_TYPES = {
 
 const triggeredEvents = new Map();
 const triggeredWarningEvents = new Map();
+const sessionTrips = new Map();
+const tripCache = new Map();
 
 const idleEventVehicles = new Set();
 const excessiveIdleVehicles = new Set();
@@ -102,6 +114,32 @@ function loadVehicleLookup() {
     console.log('⚠️ Could not load vehicles.json — will fetch from MiX');
   }
   return false;
+}
+
+function loadTripCache() {
+  try {
+    if (fs.existsSync(TRIPS_LOG_FILE)) {
+      const lines = fs.readFileSync(TRIPS_LOG_FILE, 'utf8').trim().split('\n').filter(Boolean);
+      tripCache.clear();
+      lines.forEach(line => {
+        try {
+          const trip = JSON.parse(line);
+          tripCache.set(getTripKey(trip), trip);
+        } catch { }
+      });
+      console.log(`Trip log loaded — ${tripCache.size} trips`);
+    } else {
+      const legacyPath = path.join(process.cwd(), 'public', 'driver-distance-24h.json');
+      if (fs.existsSync(legacyPath)) {
+        const data = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
+        const trips = Array.isArray(data?.drivers) ? data.drivers.flatMap(d => d.trips || []) : [];
+        trips.forEach(trip => tripCache.set(getTripKey(trip), trip));
+        console.log(`Trip log seeded from legacy — ${tripCache.size} trips`);
+      }
+    }
+  } catch {
+    console.log('Could not load trips.log');
+  }
 }
 
 function flattenGroups(node, zoneName = null, zoneId = null) {
@@ -292,12 +330,211 @@ export function getWarningEvents() {
   return result;
 }
 
+export function getSessionTrips() {
+  return Array.from(sessionTrips.values());
+}
+
+function getTripTime(trip) {
+  const raw = trip.TripEnd || trip.tripEnd || trip.EndDateTime || trip.TripStart || trip.tripStart || trip.StartDateTime || trip.CreatedDate;
+  const time = raw ? new Date(raw).getTime() : NaN;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function getMonthBounds(monthValue) {
+  const now = new Date();
+  const [year, month] = (monthValue || `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`)
+    .split('-')
+    .map(Number);
+  const start = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
+  const end = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
+  return { start, end };
+}
+
+function getDistanceRangeBounds(range = '24h', monthValue = null) {
+  const now = new Date();
+  if (range === 'currentMonth') {
+    return getMonthBounds(`${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`);
+  }
+  if (range === 'lastMonth') {
+    const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+    return getMonthBounds(`${last.getUTCFullYear()}-${String(last.getUTCMonth() + 1).padStart(2, '0')}`);
+  }
+  if (range === 'month') {
+    return getMonthBounds(monthValue);
+  }
+  return { start: new Date(now.getTime() - 24 * 60 * 60 * 1000), end: now };
+}
+
+const TRIP_MERGE_GAP_MS = 5 * 60 * 1000;
+
+function mergeTrips(sortedTrips) {
+  if (!sortedTrips.length) return [];
+  const journeys = [];
+  let current = { ...sortedTrips[0], mergedCount: 1 };
+
+  for (let i = 1; i < sortedTrips.length; i++) {
+    const trip = sortedTrips[i];
+    const currentEndMs = current.tripEnd ? new Date(current.tripEnd).getTime() : 0;
+    const nextStartMs = trip.tripStart ? new Date(trip.tripStart).getTime() : Infinity;
+
+    if (nextStartMs - currentEndMs <= TRIP_MERGE_GAP_MS) {
+      current = {
+        ...current,
+        tripEnd: trip.tripEnd || current.tripEnd,
+        distanceKm: current.distanceKm + trip.distanceKm,
+        drivingTimeSeconds: (current.drivingTimeSeconds || 0) + (trip.drivingTimeSeconds || 0),
+        durationSeconds: (current.durationSeconds || 0) + (trip.durationSeconds || 0),
+        maxSpeedKph: Math.max(current.maxSpeedKph || 0, trip.maxSpeedKph || 0),
+        mergedCount: current.mergedCount + 1,
+      };
+    } else {
+      journeys.push(current);
+      current = { ...trip, mergedCount: 1 };
+    }
+  }
+  journeys.push(current);
+  return journeys;
+}
+
+function normalizeTripForDistance(trip) {
+  const driverId = (trip.DriverId ?? trip.driverId)?.toString() || null;
+  const assetId = (trip.AssetId ?? trip.AssetID ?? trip.assetId)?.toString() || null;
+  const driver = driverLookup.get(driverId);
+  const vehicle = vehicleLookup.get(assetId);
+  return {
+    tripId: getTripKey(trip),
+    driverId,
+    driverName: driver?.name || trip.DriverName || trip.driverName || 'N/A',
+    driverPhone: driver?.phone || trip.driverPhone || 'N/A',
+    assetId,
+    regNo: vehicle?.RegistrationNumber || trip.RegistrationNumber || trip.regNo || 'N/A',
+    assetName: vehicle?.Description || trip.AssetDescription || trip.assetName || 'N/A',
+    distanceKm: Number(trip.DistanceKilometers ?? trip.distanceKm ?? 0),
+    tripStart: trip.TripStart || trip.tripStart || trip.StartDateTime || null,
+    tripEnd: trip.TripEnd || trip.tripEnd || trip.EndDateTime || null,
+    drivingTimeSeconds: trip.DrivingTime ?? trip.drivingTimeSeconds ?? null,
+    durationSeconds: trip.Duration ?? trip.durationSeconds ?? null,
+    maxSpeedKph: trip.MaxSpeedKilometersPerHour ?? trip.maxSpeedKph ?? null,
+  };
+}
+
+export function getDriverDistanceSummary(options = {}) {
+  if (driverLookup.size === 0) loadDriverLookup();
+  if (vehicleLookup.size === 0) loadVehicleLookup();
+  if (tripCache.size === 0) loadTripCache();
+
+  const { range = '24h', month = null } = options;
+  const { start, end } = getDistanceRangeBounds(range, month);
+
+  const allTrips = Array.from(tripCache.values())
+    .filter(trip => {
+      const time = getTripTime(trip);
+      return time >= start.getTime() && time < end.getTime();
+    })
+    .map(normalizeTripForDistance)
+    .filter(trip => {
+      if (!(trip.distanceKm >= 0.5)) return false;                                  // GPS noise / NaN / parking-lot shuffle
+      if (!trip.tripStart && !trip.tripEnd) return false;                            // no timestamp — incomplete record
+      const secs = trip.drivingTimeSeconds ?? trip.durationSeconds;
+      if (secs !== null && secs !== undefined && secs < 60) return false;           // phantom trip under 1 minute
+      return true;
+    });
+
+  // Group by asset
+  const byAsset = new Map();
+  allTrips.forEach(trip => {
+    const key = trip.assetId || 'unknown';
+    if (!byAsset.has(key)) {
+      byAsset.set(key, { assetId: trip.assetId, regNo: trip.regNo, assetName: trip.assetName, rawTrips: [], driverNames: new Set() });
+    }
+    const asset = byAsset.get(key);
+    asset.rawTrips.push(trip);
+    if (trip.driverName && trip.driverName !== 'N/A') asset.driverNames.add(trip.driverName);
+  });
+
+  // Build asset summaries with merged journeys and metrics
+  const assets = Array.from(byAsset.values()).map(asset => {
+    const sorted = [...asset.rawTrips].sort((a, b) => {
+      const ta = a.tripStart ? new Date(a.tripStart).getTime() : 0;
+      const tb = b.tripStart ? new Date(b.tripStart).getTime() : 0;
+      return ta - tb;
+    });
+    const journeys = mergeTrips(sorted).filter(j => j.distanceKm >= 0.5);
+    const totalDistanceKm = Number(journeys.reduce((s, j) => s + j.distanceKm, 0).toFixed(2));
+    const totalDrivingTimeSeconds = journeys.reduce((s, j) => s + (j.drivingTimeSeconds || 0), 0);
+    const avgSpeedKph = totalDrivingTimeSeconds > 0
+      ? Number((totalDistanceKm / (totalDrivingTimeSeconds / 3600)).toFixed(1))
+      : null;
+    const longestJourneyKm = journeys.length > 0
+      ? Number(Math.max(...journeys.map(j => j.distanceKm)).toFixed(2))
+      : 0;
+
+    return {
+      assetId: asset.assetId,
+      regNo: asset.regNo,
+      assetName: asset.assetName,
+      totalDistanceKm,
+      rawTripCount: asset.rawTrips.length,
+      journeyCount: journeys.length,
+      totalDrivingTimeSeconds,
+      avgSpeedKph,
+      longestJourneyKm,
+      drivers: Array.from(asset.driverNames),
+      journeys,
+    };
+  }).sort((a, b) => b.totalDistanceKm - a.totalDistanceKm);
+
+  // Derive driver-level summary from asset journeys for the leaderboard
+  const byDriver = new Map();
+  assets.forEach(asset => {
+    asset.journeys.forEach(journey => {
+      const driverKey = journey.driverId || `asset:${asset.assetId || 'unknown'}`;
+      if (!byDriver.has(driverKey)) {
+        byDriver.set(driverKey, {
+          driverId: journey.driverId,
+          driverName: journey.driverName,
+          driverPhone: journey.driverPhone,
+          totalDistanceKm: 0,
+          journeyCount: 0,
+          vehicles: new Set(),
+        });
+      }
+      const d = byDriver.get(driverKey);
+      d.totalDistanceKm += journey.distanceKm;
+      d.journeyCount += 1;
+      if (asset.regNo && asset.regNo !== 'N/A') d.vehicles.add(asset.regNo);
+    });
+  });
+
+  const drivers = Array.from(byDriver.values())
+    .map(d => ({ ...d, totalDistanceKm: Number(d.totalDistanceKm.toFixed(2)), vehicles: Array.from(d.vehicles) }))
+    .sort((a, b) => b.totalDistanceKm - a.totalDistanceKm);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    range,
+    month,
+    start: start.toISOString(),
+    end: end.toISOString(),
+    totalDistanceKm: Number(assets.reduce((s, a) => s + a.totalDistanceKm, 0).toFixed(2)),
+    rawTripCount: allTrips.length,
+    journeyCount: assets.reduce((s, a) => s + a.journeyCount, 0),
+    driverCount: drivers.length,
+    assetCount: assets.length,
+    cachedTripCount: tripCache.size,
+    assets,
+    drivers,
+  };
+}
+
 export function resetState() {
   triggeredEvents.clear();
   triggeredWarningEvents.clear();
+  sessionTrips.clear();
   idleEventVehicles.clear();
   excessiveIdleVehicles.clear();
   activeSinceToken = getCurrentSinceToken();
+  tripSinceToken = getTripsInitialSinceToken();
   activeParseRetryDone = false;
   cachedToken = null;
   tokenExpiresAt = 0;
@@ -363,6 +600,83 @@ async function getLatestPositions(token) {
   const text = await response.text();
   const safe = text.replace(/:\s*(-?\d{16,})/g, ': "$1"');
   return JSON.parse(safe);
+}
+
+function getTripKey(trip) {
+  return (
+    trip.TripId ||
+    trip.TripID ||
+    trip.Id ||
+    trip.tripId ||
+    `${trip.AssetId || trip.AssetID || trip.assetId || 'unknown'}-${trip.StartDateTime || trip.StartTime || trip.TripStart || trip.tripStart || trip.CreatedDate || trip.EndDateTime || trip.TripEnd || trip.tripEnd || JSON.stringify(trip)}`
+  ).toString();
+}
+
+function saveSessionTrips() {
+  const payload = {
+    sinceToken: tripSinceToken,
+    lastUpdate: new Date().toISOString(),
+    count: sessionTrips.size,
+    trips: Array.from(sessionTrips.values()),
+  };
+  fs.writeFileSync(TRIPS_SESSION_FILE, JSON.stringify(payload, null, 2));
+}
+
+function appendTripsToLog(newTrips) {
+  if (!newTrips.length) return;
+  const lines = newTrips.map(trip => JSON.stringify(trip)).join('\n') + '\n';
+  fs.appendFileSync(TRIPS_LOG_FILE, lines);
+}
+
+async function getLatestTrips(token) {
+  const endpoint = `${API_BASE}/trips/groups/createdsince/organisation/${JMG_ORG_ID}/sincetoken/${tripSinceToken}/quantity/1000`;
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Accept": "application/json",
+    },
+  });
+
+  if (response.status === 401) {
+    cachedToken = null; tokenExpiresAt = 0;
+    console.log('âš ï¸ Token rejected by trips endpoint, will re-authenticate next poll');
+    return [];
+  }
+
+  const newToken = response.headers.get('GetSinceToken');
+
+  if (response.status === 204) {
+    if (newToken) tripSinceToken = newToken;
+    saveSessionTrips();
+    return [];
+  }
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    console.log(`âš ï¸ Trips endpoint returned ${response.status}: ${text.slice(0, 200)}`);
+    return [];
+  }
+
+  const text = await response.text();
+  const safe = text.replace(/:\s*(-?\d{16,})/g, ': "$1"');
+  const trips = JSON.parse(safe);
+
+  if (newToken) tripSinceToken = newToken;
+
+  if (Array.isArray(trips)) {
+    const newTrips = [];
+    trips.forEach(trip => {
+      const key = getTripKey(trip);
+      sessionTrips.set(key, trip);
+      if (!tripCache.has(key)) newTrips.push(trip);
+      tripCache.set(key, trip);
+    });
+    appendTripsToLog(newTrips);
+  }
+
+  saveSessionTrips();
+  return Array.isArray(trips) ? trips : [];
 }
 
 async function getActivePanicEvents(token) {
@@ -549,6 +863,8 @@ function mergeData(positions) {
   return Array.from(vehicleLookup.values()).map(vehicle => {
     const assetId = vehicle.AssetId?.toString();
     const pos = positionsByAsset.get(assetId);
+    const driverId = pos?.DriverId || vehicle.DefaultDriverId;
+    const driver = getDriverInfo(driverId);
 
     const vehicleEvents = triggeredEvents.get(assetId) || [];
     const hasPanic = vehicleEvents.some(e => e.EventTypeId === PANIC_EVENT_TYPE_ID);
@@ -595,6 +911,9 @@ function mergeData(positions) {
       assetName: vehicle.Description || 'Unknown Vehicle',
       make: vehicle.Make || 'N/A',
       model: vehicle.Model || 'N/A',
+      driverId: driverId?.toString() || null,
+      driverName: driver.name,
+      driverPhone: driver.phone,
       status,
       date: pos?.Timestamp || new Date().toISOString(),
       panic: hasPanic,
@@ -638,12 +957,15 @@ export async function pollOnce() {
         await fetchAndCacheSites(token);
       }
 
-      const [latestActiveEvents, positions] = await Promise.all([
+      const [latestActiveEvents, positions, latestTrips] = await Promise.all([
         getLatestActiveEvents(token),
         getLatestPositions(token),
+        getLatestTrips(token),
       ]);
 
       console.log(`✅ Vehicles: ${vehicleLookup.size} | Active Events: ${latestActiveEvents.length} | Positions: ${positions.length}`);
+
+      console.log(`Trips: New ${latestTrips.length} | Session ${sessionTrips.size}`);
 
       latestActiveEvents.forEach(event => {
         if (event.EventTypeId === PANIC_EVENT_TYPE_ID) {
@@ -674,6 +996,8 @@ export async function pollOnce() {
         inactive: merged.filter(v => v.status === 'Inactive').length,
         offline: merged.filter(v => v.status === 'Offline').length,
         warnings: merged.filter(v => v.warnings && v.warnings.length > 0).length,
+        newTrips: latestTrips.length,
+        sessionTrips: sessionTrips.size,
       };
 
       const dataPath = path.join(process.cwd(), 'public', 'data.json');
@@ -726,6 +1050,7 @@ export function startPolling(options = {}) {
   loadDriverLookup();
   loadVehicleLookup();
   loadSiteLookup();
+  loadTripCache();
 
   console.log("🚀 MiX Auto-Polling Started");
   console.log("=".repeat(70));

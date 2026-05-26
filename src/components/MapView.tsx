@@ -17,6 +17,7 @@ interface Vehicle {
   regNo: string;
   transporter: string;
   assetName: string;
+  site?: string;
   status: 'Moving' | 'Idle' | 'Stationary' | 'Parked' | 'Inactive' | 'Offline';
   date: string;
   panic: boolean;
@@ -34,6 +35,7 @@ interface Props {
   authFetch: (url: string, options?: RequestInit) => Promise<Response>;
   statusFilter: string;
   onAcknowledge: (id: string) => void;
+  siteFilter?: string[] | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -80,7 +82,7 @@ function createFlagIcon(color: string, isPanic: boolean) {
   });
 }
 
-export default function MapView({ authFetch, statusFilter, onAcknowledge }: Props) {
+export default function MapView({ authFetch, statusFilter, onAcknowledge, siteFilter }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
@@ -182,7 +184,8 @@ export default function MapView({ authFetch, statusFilter, onAcknowledge }: Prop
         v.regNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.assetName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         v.transporter.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesStatus && matchesSearch;
+      const matchesSite = !siteFilter || siteFilter.includes(v.site ?? '');
+      return matchesStatus && matchesSearch && matchesSite;
     });
 
     // Find new panics and warnings for auto-pan
@@ -262,7 +265,7 @@ export default function MapView({ authFetch, statusFilter, onAcknowledge }: Prop
         markersRef.current.set(vehicle.id, marker);
       }
     });
-  }, [vehicles, statusFilter, searchTerm]);
+  }, [vehicles, statusFilter, searchTerm, siteFilter]);
 
   const visibleCount = vehicles.filter(v => {
     if (!v.position?.latitude) return false;
@@ -270,7 +273,8 @@ export default function MapView({ authFetch, statusFilter, onAcknowledge }: Prop
     const matchesSearch = searchTerm === '' ||
       v.regNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       v.assetName.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesStatus && matchesSearch;
+    const matchesSite = !siteFilter || siteFilter.includes(v.site ?? '');
+    return matchesStatus && matchesSearch && matchesSite;
   }).length;
 
   return (

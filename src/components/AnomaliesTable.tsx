@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, ChevronLeft, ChevronRight, WifiOff } from 'lucide-react';
+import TripModal from './TripModal';
+import type { AssetSummary, JourneyRecord } from './TripModal';
 
 interface Warning {
   eventId: string;
@@ -15,6 +17,9 @@ interface Anomaly {
   site?: string;
   zone?: string;
   assetName: string;
+  driverId?: string | null;
+  driverName?: string;
+  driverPhone?: string;
   status: 'Moving' | 'Idle' | 'Excessive Idle' | 'Stationary' | 'Parked' | 'Inactive' | 'Offline';
   date: string;
   panic: boolean;
@@ -24,11 +29,19 @@ interface Anomaly {
 
 type StatusFilter = 'All' | 'Moving' | 'Idle' | 'Excessive Idle' | 'Stationary' | 'Parked' | 'Offline' | 'Inactive';
 
+
 interface Props {
   statusFilter: StatusFilter;
   onFilterChange: (filter: StatusFilter) => void;
   authFetch: (url: string, options?: RequestInit) => Promise<Response>;
+  distanceSummary?: {
+    assets?: AssetSummary[];
+    drivers?: Array<{ driverId: string | null; totalDistanceKm: number; journeyCount: number }>;
+  };
+  distanceLabel?: string;
+  siteFilter?: string[] | null;
 }
+
 
 const STATUS_LABELS: Partial<Record<string, string>> = { 'Offline': 'Temp. Inactive' };
 const statusLabel = (s: string) => STATUS_LABELS[s] ?? s;
@@ -116,7 +129,7 @@ const formatDate = (dateStr: string) => {
   }
 };
 
-export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch }: Props) {
+export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch, distanceSummary, distanceLabel = 'Selected range', siteFilter }: Props) {
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -125,9 +138,18 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [isStale, setIsStale] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [selectedTripInfo, setSelectedTripInfo] = useState<{ anomaly: Anomaly; assetSummary: AssetSummary } | null>(null);
   const acknowledgedIds = useRef<Set<string>>(new Set());
   const anomaliesRef = useRef<Anomaly[]>([]);
   const warningTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const assetSummaryMap = useMemo(() => {
+    const map = new Map<string, AssetSummary>();
+    distanceSummary?.assets?.forEach(asset => {
+      if (asset.assetId) map.set(asset.assetId, asset);
+    });
+    return map;
+  }, [distanceSummary]);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth <= 768);
@@ -255,7 +277,8 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
       anomaly.assetName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       anomaly.transporter.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'All' || anomaly.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesSite = !siteFilter || siteFilter.includes(anomaly.site ?? '');
+    return matchesSearch && matchesStatus && matchesSite;
   });
 
   const totalPages = Math.ceil(filteredAnomalies.length / ITEMS_PER_PAGE);
@@ -263,7 +286,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
   const endIndex = startIndex + ITEMS_PER_PAGE;
   const currentPageItems = filteredAnomalies.slice(startIndex, endIndex);
 
-  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter]);
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, siteFilter]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -291,6 +314,36 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
       case 'Offline':        return { bg: 'var(--cd-status-offline-bg)',    text: 'var(--cd-status-offline-text)',    border: 'var(--cd-status-offline-border)' };
       default:               return { bg: 'var(--cd-status-offline-bg)',    text: 'var(--cd-status-offline-text)',    border: 'var(--cd-status-offline-border)' };
     }
+  };
+
+  const getDistanceForAnomaly = (anomaly: Anomaly) => {
+    const asset = assetSummaryMap.get(anomaly.id);
+    if (asset) return { distanceKm: asset.totalDistanceKm, tripCount: asset.journeyCount };
+    const driver = distanceSummary?.drivers?.find(d => d.driverId && d.driverId === anomaly.driverId);
+    return driver ? { distanceKm: driver.totalDistanceKm, tripCount: driver.journeyCount } : null;
+  };
+
+  const renderDistanceCell = (anomaly: Anomaly, compact = false) => {
+    const distance = getDistanceForAnomaly(anomaly);
+    const value = distance?.distanceKm ?? 0;
+    const driverName = anomaly.driverName && anomaly.driverName !== 'N/A' ? anomaly.driverName : 'No driver';
+    const assetSummary = assetSummaryMap.get(anomaly.id);
+    const clickable = !!assetSummary && assetSummary.journeyCount > 0;
+
+    return (
+      <div
+        title={clickable ? `View ${assetSummary!.journeyCount} journey${assetSummary!.journeyCount !== 1 ? 's' : ''}` : `${distanceLabel} · ${driverName}`}
+        onClick={clickable ? () => setSelectedTripInfo({ anomaly, assetSummary: assetSummary! }) : undefined}
+        style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: compact ? 'flex-end' : 'flex-start', cursor: clickable ? 'pointer' : 'default' }}
+      >
+        <span style={{ fontSize: compact ? '13px' : '14px', fontWeight: '700', color: value > 0 ? '#0d9488' : 'var(--cd-text-soft)', fontVariantNumeric: 'tabular-nums' as const }}>
+          {value.toLocaleString(undefined, { maximumFractionDigits: value < 10 ? 1 : 0 })} km
+        </span>
+        <span style={{ fontSize: '10px', color: clickable ? '#0d9488' : 'var(--cd-text-muted)', maxWidth: compact ? '160px' : '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: clickable ? 'underline' : 'none' }}>
+          {driverName}{distance?.tripCount ? ` · ${distance.tripCount} journey${distance.tripCount === 1 ? '' : 's'}` : ''}
+        </span>
+      </div>
+    );
   };
 
   if (loading) {
@@ -374,7 +427,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                 <div>Status</div>
                 <div>Location</div>
                 <div>Date</div>
-                <div>Action</div>
+                <div>Distance</div>
               </div>
             )}
 
@@ -426,7 +479,8 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                         <span style={{ fontSize: '11px', color: isPanic ? 'var(--cd-danger)' : 'var(--cd-text-soft)' }}>
                           {formatDate(anomaly.date)}
                         </span>
-                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {renderDistanceCell(anomaly, true)}
                           {hasWarnings && anomaly.warnings && <WarningBadge warnings={anomaly.warnings} />}
                           {isPanic && (
                             <button onClick={() => handleAcknowledge(anomaly.id)} style={{ padding: '6px 14px', backgroundColor: 'var(--cd-danger)', color: '#fff', fontSize: '12px', fontWeight: '600', borderRadius: '6px', border: '1px solid var(--cd-danger-border)', cursor: 'pointer' }}>
@@ -489,6 +543,7 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
                         {formatDate(anomaly.date)}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-start' }}>
+                        {renderDistanceCell(anomaly)}
                         {isPanic && (
                           <button
                             onClick={() => handleAcknowledge(anomaly.id)}
@@ -533,6 +588,16 @@ export default function FleetAnomalies({ statusFilter, onFilterChange, authFetch
         @keyframes flash { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
       `}</style>
+
+      {selectedTripInfo && (
+        <TripModal
+          vehicleName={selectedTripInfo.anomaly.assetName}
+          regNo={selectedTripInfo.anomaly.regNo}
+          assetSummary={selectedTripInfo.assetSummary}
+          distanceLabel={distanceLabel}
+          onClose={() => setSelectedTripInfo(null)}
+        />
+      )}
     </div>
   );
 }

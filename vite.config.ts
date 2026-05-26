@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { pollOnce, startPolling, clearTriggeredEvent, resetState, getWarningEvents } from './scripts/mix-test.js'
+import { pollOnce, startPolling, clearTriggeredEvent, resetState, getWarningEvents, getSessionTrips, getDriverDistanceSummary } from './scripts/mix-test.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -169,6 +169,39 @@ export default defineConfig({
         })
 
         // Events log endpoint — reads from events.log and panic.log, enriches with vehicle data
+        server.middlewares.use('/api/trips/session', async (req, res) => {
+          if (!isAuthorized(req)) {
+            res.statusCode = 401
+            res.end('Unauthorized')
+            return
+          }
+          if (req.method !== 'GET') {
+            res.statusCode = 405
+            res.end('Method Not Allowed')
+            return
+          }
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(getSessionTrips()))
+        })
+
+        server.middlewares.use('/api/driver-distance', async (req, res) => {
+          if (!isAuthorized(req)) {
+            res.statusCode = 401
+            res.end('Unauthorized')
+            return
+          }
+          if (req.method !== 'GET') {
+            res.statusCode = 405
+            res.end('Method Not Allowed')
+            return
+          }
+          const requestUrl = new URL(req.url || '', 'http://localhost')
+          const range = requestUrl.searchParams.get('range') || '24h'
+          const month = requestUrl.searchParams.get('month')
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(getDriverDistanceSummary({ range, month })))
+        })
+
         server.middlewares.use('/api/events/log', async (req, res) => {
           if (!isAuthorized(req)) {
             res.statusCode = 401

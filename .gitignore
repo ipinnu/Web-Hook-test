@@ -44,6 +44,9 @@ public/acknowledged.json
 public/drivers.json
 public/vehicles.json
 public/sites.json
+public/trips-cache.json
+public/trips-session.json
+public/driver-distance-24h.json
 
 # Claude Code memory
 .claude/

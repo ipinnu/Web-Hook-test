@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, ChevronDown, ChevronUp, AlertOctagon, WifiOff, MapPin } from 'lucide-react';
+import TripModal from './TripModal';
+import type { AssetSummary } from './TripModal';
 
 interface Warning { eventId: string; label: string; timestamp: string; eventTime: string; }
 
@@ -27,6 +29,9 @@ type StatusFilter = 'All' | StatusType;
 interface Props {
   statusFilter: StatusFilter;
   authFetch: (url: string, options?: RequestInit) => Promise<Response>;
+  distanceSummary?: { assets?: AssetSummary[] };
+  distanceLabel?: string;
+  siteFilter?: string[] | null;
 }
 
 const STATUS: Record<StatusType, { color: string; bg: string; dot: string; label: string }> = {
@@ -43,16 +48,6 @@ const STATUS_PRIORITY: Record<StatusType, number> = {
   'Moving': 7, 'Idle': 6, 'Excessive Idle': 5, 'Stationary': 4, 'Parked': 3, 'Offline': 2, 'Inactive': 1,
 };
 
-// Site menu options
-const GEO: Record<string, string[] | null> = {
-  'All Sites': null,
-  'NBL': ['NBL'],
-  'HAULAGE': ['HAULAGE'],
-  'Light Fleet JMG': ['Light Fleet JMG'],
-  'Hiabs Logistics': ['Hiabs Logistics'],
-  'Abuja': ['Abuja'],
-  'Port Harcourt': ['PH'],
-};
 
 const STALE_MS = 60_000;
 const WARNING_CLEAR_MS = 60_000;
@@ -88,12 +83,15 @@ function StatusChips({ vehicles }: { vehicles: Vehicle[] }) {
   );
 }
 
-function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
+function VehicleCard({ vehicle, distance, onDistanceClick }: { vehicle: Vehicle; distance?: AssetSummary; onDistanceClick?: () => void }) {
   const s = STATUS[vehicle.status] ?? STATUS['Offline'];
   const isPanic = vehicle.panic;
   const uniqueWarnings = [...new Set((vehicle.warnings ?? []).map(w => w.label))];
   const address = vehicle.position?.address && vehicle.position.address !== 'Unknown'
     ? vehicle.position.address : null;
+  const validJourneys = (distance?.journeys ?? []).filter(j => j.distanceKm >= 0.5);
+  const validDistanceKm = validJourneys.reduce((s, j) => s + j.distanceKm, 0);
+  const validJourneyCount = validJourneys.length;
 
   return (
     <div className={`gv-card${isPanic ? ' gv-card-panic' : ''}`}>
@@ -134,11 +132,29 @@ function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
 
       {/* Asset name */}
       <div style={{
-        fontSize: '12px', color: 'var(--cd-text-muted)', marginBottom: uniqueWarnings.length ? '8px' : '0',
+        fontSize: '12px', color: 'var(--cd-text-muted)', marginBottom: '4px',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
         {vehicle.assetName}
       </div>
+
+      {/* Distance */}
+      {validJourneyCount > 0 ? (
+        <div
+          onClick={onDistanceClick}
+          title="View journeys"
+          style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: uniqueWarnings.length ? '8px' : '0', cursor: 'pointer' }}
+        >
+          <span style={{ fontSize: '12px', fontWeight: '700', color: '#0d9488', fontVariantNumeric: 'tabular-nums' as const, textDecoration: 'underline', textDecorationColor: 'rgba(13,148,136,0.4)' }}>
+            {validDistanceKm.toLocaleString(undefined, { maximumFractionDigits: validDistanceKm < 10 ? 1 : 0 })} km
+          </span>
+          <span style={{ fontSize: '10px', color: '#0d9488', opacity: 0.7 }}>
+            · {validJourneyCount} journey{validJourneyCount !== 1 ? 's' : ''}
+          </span>
+        </div>
+      ) : (
+        <div style={{ marginBottom: uniqueWarnings.length ? '8px' : '0' }} />
+      )}
 
       {/* Warning tags */}
       {uniqueWarnings.length > 0 && (
@@ -185,11 +201,22 @@ interface ZoneSectionProps {
   siteName: string;
   vehicles: Vehicle[];
   startOpen: boolean;
+  assetDistanceMap: Map<string, AssetSummary>;
+  distanceLabel: string;
+  onVehicleClick: (vehicle: Vehicle, summary: AssetSummary) => void;
 }
 
-function ZoneSection({ siteName, vehicles, startOpen }: ZoneSectionProps) {
+function ZoneSection({ siteName, vehicles, startOpen, assetDistanceMap, distanceLabel, onVehicleClick }: ZoneSectionProps) {
   const [open, setOpen] = useState(startOpen);
   const hasPanic = vehicles.some(v => v.panic);
+
+  const siteDistanceKm = vehicles.reduce((sum, v) => {
+    const journeys = (assetDistanceMap.get(v.id)?.journeys ?? []).filter(j => j.distanceKm >= 0.5);
+    return sum + journeys.reduce((s, j) => s + j.distanceKm, 0);
+  }, 0);
+  const siteJourneys = vehicles.reduce((sum, v) => {
+    return sum + (assetDistanceMap.get(v.id)?.journeys ?? []).filter(j => j.distanceKm >= 0.5).length;
+  }, 0);
 
   useEffect(() => { setOpen(startOpen); }, [startOpen]);
 
@@ -215,6 +242,16 @@ function ZoneSection({ siteName, vehicles, startOpen }: ZoneSectionProps) {
             }}>
               {vehicles.length} vehicle{vehicles.length !== 1 ? 's' : ''}
             </span>
+            {siteDistanceKm > 0 && (
+              <span title={`${distanceLabel} — ${siteJourneys} journeys`} style={{
+                fontSize: '11px', fontWeight: '700', padding: '2px 9px', borderRadius: '999px',
+                background: 'rgba(13,148,136,0.1)', color: '#0d9488',
+                border: '1px solid rgba(13,148,136,0.2)',
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {siteDistanceKm.toLocaleString(undefined, { maximumFractionDigits: 0 })} km
+              </span>
+            )}
             {hasPanic && (
               <span style={{
                 display: 'flex', alignItems: 'center', gap: '4px',
@@ -236,20 +273,30 @@ function ZoneSection({ siteName, vehicles, startOpen }: ZoneSectionProps) {
 
       {open && (
         <div className="gv-grid">
-          {vehicles.map(v => <VehicleCard key={v.id} vehicle={v} />)}
+          {vehicles.map(v => {
+            const summary = assetDistanceMap.get(v.id);
+            return (
+              <VehicleCard
+                key={v.id}
+                vehicle={v}
+                distance={summary}
+                onDistanceClick={summary ? () => onVehicleClick(v, summary) : undefined}
+              />
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-export default function GroupedView({ statusFilter, authFetch }: Props) {
+export default function GroupedView({ statusFilter, authFetch, distanceSummary, distanceLabel = 'Selected range', siteFilter }: Props) {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [isStale, setIsStale] = useState(false);
   const [search, setSearch] = useState('');
-  const [geo, setGeo] = useState<string>('All Sites');
   const [allOpen, setAllOpen] = useState(true);
+  const [selectedModal, setSelectedModal] = useState<{ vehicle: Vehicle; summary: AssetSummary } | null>(null);
   const warningTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastSuccess = useRef<number>(Date.now());
 
@@ -298,13 +345,20 @@ export default function GroupedView({ statusFilter, authFetch }: Props) {
     return () => clearInterval(iv);
   }, []);
 
+  const assetDistanceMap = useMemo(() => {
+    const map = new Map<string, AssetSummary>();
+    distanceSummary?.assets?.forEach(a => {
+      if (a.assetId) map.set(a.assetId, a as AssetSummary);
+    });
+    return map;
+  }, [distanceSummary]);
+
   const groups = useMemo(() => {
     const q = search.toLowerCase().trim();
-    const geoFilter = GEO[geo];
 
     const filtered = vehicles.filter(v => {
       if (statusFilter !== 'All' && v.status !== statusFilter) return false;
-      if (geoFilter && !geoFilter.includes(v.site)) return false;
+      if (siteFilter && !siteFilter.includes(v.site)) return false;
       if (!q) return true;
       return (
         v.regNo.toLowerCase().includes(q) ||
@@ -338,7 +392,7 @@ export default function GroupedView({ statusFilter, authFetch }: Props) {
       if (am !== bm) return bm - am;
       return b.length - a.length;
     });
-  }, [vehicles, statusFilter, search, geo]);
+  }, [vehicles, statusFilter, search, siteFilter]);
 
   const totalShown = groups.reduce((n, [, vs]) => n + vs.length, 0);
 
@@ -369,27 +423,6 @@ export default function GroupedView({ statusFilter, authFetch }: Props) {
             />
           </div>
 
-          {/* Site Menu */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--cd-text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginRight: '2px' }}>Site</span>
-            {Object.keys(GEO).map(g => (
-              <button
-                key={g}
-                onClick={() => setGeo(g)}
-                style={{
-                  fontSize: '12px', fontWeight: geo === g ? '700' : '500',
-                  padding: '5px 12px', borderRadius: '999px', cursor: 'pointer',
-                  border: `1px solid ${geo === g ? '#F05022' : 'var(--cd-border)'}`,
-                  background: geo === g ? '#F05022' : 'var(--cd-surface)',
-                  color: geo === g ? '#ffffff' : 'var(--cd-text-muted)',
-                  transition: 'all 0.15s',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {g}
-              </button>
-            ))}
-          </div>
 
           {/* Right side */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
@@ -419,12 +452,22 @@ export default function GroupedView({ statusFilter, authFetch }: Props) {
         ) : (
           <div className="gv-zones-grid">
             {groups.map(([siteName, vs]) => (
-              <ZoneSection key={siteName} siteName={siteName} vehicles={vs} startOpen={allOpen} />
+              <ZoneSection key={siteName} siteName={siteName} vehicles={vs} startOpen={allOpen} assetDistanceMap={assetDistanceMap} distanceLabel={distanceLabel} onVehicleClick={(v, s) => setSelectedModal({ vehicle: v, summary: s })} />
             ))}
           </div>
         )}
 
       </div>
+
+      {selectedModal && (
+        <TripModal
+          vehicleName={selectedModal.vehicle.assetName}
+          regNo={selectedModal.vehicle.regNo}
+          assetSummary={selectedModal.summary}
+          distanceLabel={distanceLabel}
+          onClose={() => setSelectedModal(null)}
+        />
+      )}
     </div>
   );
 }

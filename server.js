@@ -2,7 +2,7 @@ import express from 'express'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
-import { startPolling, pollOnce, clearTriggeredEvent, resetState, getWarningEvents } from './scripts/mix-test.js'
+import { startPolling, pollOnce, clearTriggeredEvent, resetState, getWarningEvents, getSessionTrips, getDriverDistanceSummary } from './scripts/mix-test.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -37,7 +37,7 @@ function saveAcknowledged(ids) {
 
 // Block direct access to sensitive JSON files
 app.use((req, res, next) => {
-  const blocked = ['/data.json', '/metadata.json', '/drivers.json', '/vehicles.json', '/acknowledged.json']
+  const blocked = ['/data.json', '/metadata.json', '/drivers.json', '/vehicles.json', '/acknowledged.json', '/trips-session.json', '/trips-cache.json', '/driver-distance-24h.json']
   if (blocked.includes(req.path)) {
     return res.status(403).end('Forbidden')
   }
@@ -110,6 +110,20 @@ app.get('/api/metadata', (req, res) => {
 app.get('/api/events', (req, res) => {
   if (!isAuthorized(req)) return unauthorized(res)
   res.json(getWarningEvents())
+})
+
+// Session trips
+app.get('/api/trips/session', (req, res) => {
+  if (!isAuthorized(req)) return unauthorized(res)
+  res.json(getSessionTrips())
+})
+
+// Driver distance summary
+app.get('/api/driver-distance', (req, res) => {
+  if (!isAuthorized(req)) return unauthorized(res)
+  const range = req.query.range?.toString() || '24h'
+  const month = req.query.month?.toString() || null
+  res.json(getDriverDistanceSummary({ range, month }))
 })
 
 // Drivers

@@ -1192,6 +1192,87 @@ body {
   color: currentColor;
 }
 
+/* Labeled toolbar button */
+.cd-toolbtn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--cd-text-muted);
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+  white-space: nowrap;
+}
+.cd-toolbtn:hover {
+  background: var(--cd-surface-2);
+  border-color: var(--cd-border);
+  color: var(--cd-text);
+}
+.cd-toolbtn-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  color: inherit;
+}
+
+/* Segmented view control */
+.cd-view-seg {
+  display: inline-flex;
+  border: 1px solid var(--cd-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--cd-surface) 88%, transparent);
+}
+.cd-view-seg-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 11px;
+  border: none;
+  border-left: 1px solid var(--cd-border);
+  background: transparent;
+  color: var(--cd-text-muted);
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.cd-view-seg-btn:first-child {
+  border-left: none;
+}
+.cd-view-seg-btn:hover {
+  background: var(--cd-surface-2);
+  color: var(--cd-text);
+}
+.cd-view-seg-btn.active {
+  background: var(--cd-surface-2);
+  color: var(--cd-text);
+}
+[data-theme="dark"] .cd-toolbtn {
+  color: rgba(255,255,255,0.55);
+}
+[data-theme="dark"] .cd-toolbtn:hover {
+  color: #ffffff;
+}
+[data-theme="dark"] .cd-view-seg-btn {
+  color: rgba(255,255,255,0.45);
+}
+[data-theme="dark"] .cd-view-seg-btn:hover,
+[data-theme="dark"] .cd-view-seg-btn.active {
+  color: #ffffff;
+}
+
 [data-theme="dark"] .metric-grid .bg-white{
   background: color-mix(in oklab, var(--cd-surface) 92%, transparent);
 }
@@ -1295,8 +1376,9 @@ body {
 /* ── Two-tier stat layout ─────────────────────────────────────────── */
 .cd-stats-tier1 {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 14px;
+  align-items: stretch;
   margin-bottom: 12px;
 }
 
@@ -1312,6 +1394,8 @@ body {
 }
 
 .cd-stat-hero {
+  display: flex;
+  flex-direction: column;
   padding: 20px 22px 24px;
   border-radius: 14px;
   border: 1px solid var(--cd-border);
@@ -1362,7 +1446,7 @@ body {
     padding: 14px 10px;
   }
 
-  .cd-stats-tier1 { gap: 10px; }
+  .cd-stats-tier1 { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .cd-stats-tier2 { gap: 8px; }
   .cd-stat-hero { padding: 16px 18px 20px; }
 }
@@ -1435,6 +1519,7 @@ body {
   }
 
   .cd-stats-tier1 {
+    grid-template-columns: repeat(2, 1fr);
     gap: 8px;
     margin-bottom: 8px;
   }
