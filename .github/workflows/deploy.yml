@@ -1,4 +1,4 @@
-name: Deploy CNL Dashboard
+name: Deploy JMG Dashboard
 
 on:
   push:
@@ -17,8 +17,8 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
           script: |
-            cd /var/www/cnl-dashboard
+            cd /var/www/jmg-dashboard
             git pull origin main
             npm install
             npm run build
-            pm2 restart cnl-dashboard
+            pm2 restart jmg-dashboard
