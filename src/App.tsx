@@ -347,7 +347,7 @@ function DashboardContent() {
               <div>
                 <h1 className="cd-title mb-1" style={{ color: 'var(--cd-text)' }}>JMG Fleet Dashboard</h1>
                 <p className="cd-subtitle" style={{ color: 'var(--cd-text-muted)' }}>
-                  From Power to Plug — real-time fleet visibility.
+                  From Power to Plug — real-time fleet visibility dashboard.
                 </p>
               </div>
             </div>
