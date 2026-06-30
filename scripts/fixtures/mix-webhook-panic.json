@@ -1,0 +1,13 @@
+{
+  "EventId": "9999999999999999001",
+  "EventTypeId": "-4444421556390778105",
+  "AssetId": "1234567890123456789",
+  "DriverId": "1234567890123456790",
+  "EventDateTime": "2026-06-30T10:00:00.000Z",
+  "ReceivedDateTime": "2026-06-30T10:00:01.000Z",
+  "Position": {
+    "Latitude": 6.5244,
+    "Longitude": 3.3792,
+    "FormattedAddress": "Lagos, Nigeria (mock test event)"
+  }
+}

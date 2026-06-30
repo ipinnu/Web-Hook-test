@@ -67,6 +67,10 @@ raw-events.json
 since-token.txt
 metadata.json 
 
+# SQLite webhook store
+mix-events.db
+mix-events.db-*
+
 #new
 panic.log
 events.log

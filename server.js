@@ -1,8 +1,12 @@
 import express from 'express'
 import path from 'path'
 import fs from 'fs'
+import * as dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import { startPolling, pollOnce, clearTriggeredEvent, resetState, getWarningEvents, getSessionTrips, getDriverDistanceSummary } from './scripts/mix-test.js'
+import { insertWebhookEvents, getRecentWebhookEvents, normalizeWebhookBody } from './scripts/mix-db.js'
+
+dotenv.config({ path: ['.env.local', '.env'] })
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -10,6 +14,8 @@ const __dirname = path.dirname(__filename)
 const app = express()
 const PORT = process.env.PORT || 3000
 const API_SECRET = process.env.API_SECRET
+const WEBHOOK_SECRET = process.env.MIX_WEBHOOK_SECRET
+const WEBHOOK_URL = process.env.WEBHOOK_PUBLIC_URL || 'https://jmg.bestpracticesltd.com.ng/api/mix-webhook'
 const ACKNOWLEDGED_FILE = path.join(process.cwd(), 'public', 'acknowledged.json')
 
 app.use(express.json())
@@ -20,6 +26,11 @@ function isAuthorized(req) {
 
 function unauthorized(res) {
   res.status(401).end('Unauthorized')
+}
+
+function isWebhookAuthorized(req) {
+  if (!WEBHOOK_SECRET) return false
+  return req.headers['x-webhook-secret'] === WEBHOOK_SECRET
 }
 
 function loadAcknowledged() {
@@ -196,6 +207,41 @@ app.get('/api/events/log', (req, res) => {
   } catch {
     res.status(500).end('Internal Server Error')
   }
+})
+
+// Public ping — verify domain/nginx routes to this app (no auth)
+app.get('/api/mix-webhook/health', (_req, res) => {
+  res.json({
+    ok: true,
+    service: 'jmg-mix-webhook',
+    webhookUrl: WEBHOOK_URL,
+    secretConfigured: Boolean(WEBHOOK_SECRET),
+  })
+})
+
+// MiX webhook — MiX (or test scripts) POST events here; no dashboard x-api-secret
+app.post('/api/mix-webhook', (req, res) => {
+  if (!isWebhookAuthorized(req)) return unauthorized(res)
+
+  const events = normalizeWebhookBody(req.body)
+  if (events.length === 0) {
+    return res.status(400).json({ ok: false, error: 'Expected a MiX event object or array of events' })
+  }
+
+  try {
+    const ids = insertWebhookEvents(events)
+    res.status(200).json({ ok: true, count: ids.length, ids })
+  } catch (err) {
+    console.error('Webhook insert failed:', err.message)
+    res.status(500).json({ ok: false, error: 'Failed to store event' })
+  }
+})
+
+// Inspect recent webhook events (dashboard auth)
+app.get('/api/mix-webhook/events', (req, res) => {
+  if (!isAuthorized(req)) return unauthorized(res)
+  const limit = Math.min(Number(req.query.limit) || 50, 200)
+  res.json(getRecentWebhookEvents(limit))
 })
 
 // Serve built frontend
