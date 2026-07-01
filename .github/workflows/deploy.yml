@@ -24,4 +24,4 @@ jobs:
             npm run build
             pm2 restart jmg-dashboard
             sleep 3
-            curl -sf http://127.0.0.1:3000/api/mix-webhook/health || echo "Webhook health check failed — check pm2 logs"
+            curl -sf http://127.0.0.1:3001/api/mix-webhook/health || echo "Webhook health check failed — check pm2 logs"

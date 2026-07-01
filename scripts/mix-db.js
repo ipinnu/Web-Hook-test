@@ -1,36 +1,24 @@
-import Database from 'better-sqlite3'
+import fs from 'fs'
 import path from 'path'
 
-const DB_PATH = path.join(process.cwd(), 'mix-events.db')
-
-let db
-
-function getDb() {
-  if (!db) {
-    db = new Database(DB_PATH)
-    db.pragma('journal_mode = WAL')
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS mix_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        received_at TEXT NOT NULL DEFAULT (datetime('now')),
-        event_id TEXT,
-        event_type_id TEXT,
-        asset_id TEXT,
-        source TEXT NOT NULL DEFAULT 'webhook',
-        payload TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_mix_events_received_at ON mix_events(received_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_mix_events_event_id ON mix_events(event_id);
-    `)
-  }
-  return db
-}
+const WEBHOOK_LOG = path.join(process.cwd(), 'webhook-events.log')
 
 function extractFields(event) {
   const eventId = (event.EventId ?? event.eventId ?? event.id)?.toString() || null
   const eventTypeId = (event.EventTypeId ?? event.eventTypeId ?? event.type)?.toString() || null
   const assetId = (event.AssetId ?? event.assetId ?? event.AssetID)?.toString() || null
   return { eventId, eventTypeId, assetId }
+}
+
+function readLogEntries() {
+  try {
+    if (!fs.existsSync(WEBHOOK_LOG)) return []
+    return fs.readFileSync(WEBHOOK_LOG, 'utf8').trim().split('\n').filter(Boolean).map(line => {
+      try { return JSON.parse(line) } catch { return null }
+    }).filter(Boolean)
+  } catch {
+    return []
+  }
 }
 
 export function normalizeWebhookBody(body) {
@@ -44,45 +32,30 @@ export function normalizeWebhookBody(body) {
 }
 
 export function insertWebhookEvents(events, source = 'webhook') {
-  const database = getDb()
-  const insert = database.prepare(`
-    INSERT INTO mix_events (event_id, event_type_id, asset_id, source, payload)
-    VALUES (@eventId, @eventTypeId, @assetId, @source, @payload)
-  `)
+  const existing = readLogEntries()
+  let nextId = existing.length > 0 ? Math.max(...existing.map(e => e.id || 0)) + 1 : 1
+  const ids = []
 
-  const insertMany = database.transaction((rows) => {
-    const ids = []
-    for (const event of rows) {
-      const fields = extractFields(event)
-      const result = insert.run({
-        ...fields,
-        source,
-        payload: JSON.stringify(event),
-      })
-      ids.push(Number(result.lastInsertRowid))
+  const lines = events.map(event => {
+    const fields = extractFields(event)
+    const record = {
+      id: nextId,
+      receivedAt: new Date().toISOString(),
+      ...fields,
+      source,
+      payload: event,
     }
-    return ids
+    ids.push(nextId)
+    nextId++
+    return JSON.stringify(record)
   })
 
-  return insertMany(events)
+  fs.appendFileSync(WEBHOOK_LOG, lines.join('\n') + '\n')
+  return ids
 }
 
 export function getRecentWebhookEvents(limit = 50) {
-  const database = getDb()
-  const rows = database.prepare(`
-    SELECT id, received_at, event_id, event_type_id, asset_id, source, payload
-    FROM mix_events
-    ORDER BY id DESC
-    LIMIT ?
-  `).all(limit)
-
-  return rows.map(row => ({
-    id: row.id,
-    receivedAt: row.received_at,
-    eventId: row.event_id,
-    eventTypeId: row.event_type_id,
-    assetId: row.asset_id,
-    source: row.source,
-    payload: JSON.parse(row.payload),
-  }))
+  return readLogEntries()
+    .sort((a, b) => (b.id || 0) - (a.id || 0))
+    .slice(0, limit)
 }

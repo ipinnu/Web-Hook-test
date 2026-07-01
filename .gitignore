@@ -71,6 +71,9 @@ metadata.json
 mix-events.db
 mix-events.db-*
 
+# Webhook event log
+webhook-events.log
+
 #new
 panic.log
 events.log
