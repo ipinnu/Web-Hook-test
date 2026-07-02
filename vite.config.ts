@@ -1,8 +1,16 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import * as dotenv from 'dotenv'
 import { pollOnce, clearTriggeredEvent, resetState, getWarningEvents, getSessionTrips, getDriverDistanceSummary } from './scripts/mix-test.js'
+import { initWebhookStore, getWebhookDashboardData } from './scripts/mix-webhook-store.js'
+import { getPlaygroundSetup, sendPlaygroundPayload, readJsonBody } from './scripts/mix-webhook-playground.js'
 import fs from 'fs'
 import path from 'path'
+
+dotenv.config({ path: ['.env.local', '.env'] })
+
+const WEBHOOK_SECRET = process.env.MIX_WEBHOOK_SECRET
+const WEBHOOK_URL = process.env.WEBHOOK_PUBLIC_URL || 'https://jmg.bestpracticesltd.com.ng/api/mix-webhook'
 
 const ACKNOWLEDGED_FILE = path.join(process.cwd(), 'public', 'acknowledged.json')
 const API_SECRET = process.env.API_SECRET
@@ -27,6 +35,12 @@ function isAuthorized(req: any): boolean {
   return secret === API_SECRET
 }
 
+function jsonResponse(res: any, status: number, payload: unknown) {
+  res.statusCode = status
+  res.setHeader('Content-Type', 'application/json')
+  res.end(JSON.stringify(payload))
+}
+
 export default defineConfig({
   server: {
     host: true,
@@ -40,6 +54,78 @@ export default defineConfig({
       name: 'mix-data-poller',
       configureServer(server) {
         // Webhook demo branch — MiX polling disabled (no startPolling here)
+        initWebhookStore().catch(err => console.error('Webhook store init failed:', err.message))
+
+        server.middlewares.use('/api/mix-webhook/dashboard-data', (req, res) => {
+          if (req.method !== 'GET') {
+            res.statusCode = 405
+            res.end('Method Not Allowed')
+            return
+          }
+          if (!isAuthorized(req)) {
+            res.statusCode = 401
+            res.end('Unauthorized')
+            return
+          }
+          const requestUrl = new URL(req.url || '', 'http://localhost')
+          const limit = Math.min(Number(requestUrl.searchParams.get('limit')) || 20, 100)
+          jsonResponse(res, 200, getWebhookDashboardData(limit))
+        })
+
+        server.middlewares.use('/api/mix-webhook/playground/setup', (req, res) => {
+          if (req.method !== 'GET') {
+            res.statusCode = 405
+            res.end('Method Not Allowed')
+            return
+          }
+          if (!isAuthorized(req)) {
+            res.statusCode = 401
+            res.end('Unauthorized')
+            return
+          }
+          jsonResponse(res, 200, getPlaygroundSetup(WEBHOOK_URL, WEBHOOK_SECRET))
+        })
+
+        server.middlewares.use('/api/mix-webhook/playground/send', async (req, res) => {
+          if (req.method !== 'POST') {
+            res.statusCode = 405
+            res.end('Method Not Allowed')
+            return
+          }
+          if (!isAuthorized(req)) {
+            res.statusCode = 401
+            res.end('Unauthorized')
+            return
+          }
+          if (!WEBHOOK_SECRET) {
+            jsonResponse(res, 500, { ok: false, error: 'Webhook secret is not configured' })
+            return
+          }
+          try {
+            const body = await readJsonBody(req)
+            const payload = body?.payload
+            if (!payload || typeof payload !== 'object') {
+              jsonResponse(res, 400, { ok: false, error: 'Expected JSON object or array payload' })
+              return
+            }
+            const result = await sendPlaygroundPayload(payload)
+            jsonResponse(res, result.status, {
+              ok: result.ok,
+              webhookUrl: WEBHOOK_URL,
+              sent: payload,
+              postStatus: result.status,
+              postResponse: result.postResponse,
+              fetchUrl: '/api/mix-webhook/dashboard-data?limit=20',
+              dashboard: result.dashboard,
+              fetched: result.fetched,
+              error: result.ok ? undefined : result.postResponse?.error,
+            })
+          } catch (err) {
+            console.error('Webhook demo send failed:', (err as Error).message)
+            jsonResponse(res, 500, { ok: false, error: 'Failed to send demo payload' })
+          }
+        })
+
         // Refresh endpoint
         server.middlewares.use('/api/refresh', async (req, res) => {
           if (!isAuthorized(req)) {

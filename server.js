@@ -3,9 +3,9 @@ import path from 'path'
 import fs from 'fs'
 import * as dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
-import fetch from 'node-fetch'
 import { pollOnce, clearTriggeredEvent, resetState, getWarningEvents, getSessionTrips, getDriverDistanceSummary } from './scripts/mix-test.js'
 import { normalizeInboundBody, processWebhookPayloads } from './scripts/mix-webhook-process.js'
+import { getPlaygroundSetup, sendPlaygroundPayload } from './scripts/mix-webhook-playground.js'
 import {
   initWebhookStore,
   insertInboxRecords,
@@ -55,59 +55,6 @@ function loadAcknowledged() {
 
 function saveAcknowledged(ids) {
   fs.writeFileSync(ACKNOWLEDGED_FILE, JSON.stringify(ids, null, 2))
-}
-
-function readFixture(name) {
-  const filePath = path.join(__dirname, 'scripts', 'fixtures', name)
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'))
-}
-
-function stampDemoPayload(payload, kind) {
-  const now = new Date().toISOString()
-  const id = `MOCK-DEMO-${kind.toUpperCase()}-${Date.now()}`
-  const next = JSON.parse(JSON.stringify(payload))
-
-  if (next.EventId) {
-    next.EventId = id
-    next.EventDateTime = now
-    next.ReceivedDateTime = now
-    if (next.Position) next.Position.FormattedAddress = 'DEMO - not real MiX data'
-  }
-  if (next.TripId) {
-    next.TripId = id
-    next.TripStart = new Date(Date.now() - 45 * 60 * 1000).toISOString()
-    next.TripEnd = now
-  }
-  if (next.Timestamp) {
-    next.Timestamp = now
-    next.FormattedAddress = 'DEMO - not real MiX data'
-  }
-
-  return next
-}
-
-function getWebhookDemoSamples() {
-  const panic = stampDemoPayload(readFixture('mix-webhook-panic.json'), 'panic')
-  const trip = stampDemoPayload(readFixture('mix-webhook-trip.json'), 'trip')
-  const position = stampDemoPayload(readFixture('mix-webhook-position.json'), 'position')
-
-  return {
-    panic,
-    trip,
-    position,
-    vehicle: {
-      AssetId: '1234567890123456789',
-      RegistrationNumber: 'DEMO-JMG-001',
-      Description: 'DEMO - JMG sample vehicle',
-      Make: 'Demo',
-      Model: 'Webhook',
-    },
-    driver: {
-      DriverId: '1234567890123456790',
-      Name: 'DEMO Driver',
-      MobileNumber: '+2340000000000',
-    },
-  }
 }
 
 // Block direct access to sensitive JSON files
@@ -325,21 +272,10 @@ app.get('/api/mix-webhook/dashboard-data', (req, res) => {
 // Webhook demo setup — safe metadata and sample payloads, never raw secrets
 app.get('/api/mix-webhook/playground/setup', (req, res) => {
   if (!isAuthorized(req)) return unauthorized(res)
-  res.json({
-    webhookUrl: WEBHOOK_URL,
-    dashboardDataUrl: '/api/mix-webhook/dashboard-data?limit=20',
-    eventsUrl: '/api/mix-webhook/events?limit=10',
-    docsUrl: '/docs/mix-webhook',
-    secretConfigured: Boolean(WEBHOOK_SECRET),
-    expectedHeaders: {
-      'Content-Type': 'application/json',
-      'x-webhook-secret': WEBHOOK_SECRET ? 'Configured' : 'Missing',
-    },
-    samples: getWebhookDemoSamples(),
-  })
+  res.json(getPlaygroundSetup(WEBHOOK_URL, WEBHOOK_SECRET))
 })
 
-// Webhook demo send — the browser calls this; the server posts to the real webhook route
+// Webhook demo send — stores payload directly (no HTTP loopback)
 app.post('/api/mix-webhook/playground/send', async (req, res) => {
   if (!isAuthorized(req)) return unauthorized(res)
   if (!WEBHOOK_SECRET) {
@@ -352,33 +288,17 @@ app.post('/api/mix-webhook/playground/send', async (req, res) => {
   }
 
   try {
-    const loopbackUrl = `http://127.0.0.1:${PORT}/api/mix-webhook`
-    const response = await fetch(loopbackUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-webhook-secret': WEBHOOK_SECRET,
-      },
-      body: JSON.stringify(payload),
-    })
-
-    const text = await response.text()
-    let postResponse
-    try {
-      postResponse = JSON.parse(text)
-    } catch {
-      postResponse = { raw: text }
-    }
-
-    res.status(response.ok ? 200 : response.status).json({
-      ok: response.ok,
+    const result = await sendPlaygroundPayload(payload)
+    res.status(result.status).json({
+      ok: result.ok,
       webhookUrl: WEBHOOK_URL,
       sent: payload,
-      postStatus: response.status,
-      postResponse,
+      postStatus: result.status,
+      postResponse: result.postResponse,
       fetchUrl: '/api/mix-webhook/dashboard-data?limit=20',
-      dashboard: getWebhookDashboardData(20),
-      fetched: getRecentInbox(10),
+      dashboard: result.dashboard,
+      fetched: result.fetched,
+      error: result.ok ? undefined : result.postResponse?.error,
     })
   } catch (err) {
     console.error('Webhook demo send failed:', err.message)

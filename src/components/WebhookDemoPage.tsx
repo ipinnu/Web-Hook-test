@@ -131,6 +131,22 @@ function formatDate(value?: string | null) {
   return date.toLocaleString();
 }
 
+async function parseResponseJson<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text.trim()) {
+    throw new Error(
+      res.ok
+        ? 'Server returned an empty response'
+        : `Request failed (${res.status}). Webhook API may be unavailable — try npm run build && npm start.`,
+    );
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Server returned non-JSON (${res.status}): ${text.slice(0, 160)}`);
+  }
+}
+
 function cloneWithFreshDemoValues(sample: unknown, key: SampleKey) {
   const now = new Date().toISOString();
   const id = `MOCK-DEMO-${key.toUpperCase()}-${Date.now()}`;
@@ -253,8 +269,8 @@ export default function WebhookDemoPage({ authFetch }: WebhookDemoPageProps) {
 
   const loadDashboard = async () => {
     const res = await authFetch('/api/mix-webhook/dashboard-data?limit=20');
-    if (!res.ok) throw new Error('Failed to load webhook dashboard data');
-    setDashboard(await res.json() as WebhookDashboardData);
+    if (!res.ok) throw new Error(`Failed to load webhook dashboard data (${res.status})`);
+    setDashboard(await parseResponseJson<WebhookDashboardData>(res));
   };
 
   useEffect(() => {
@@ -263,8 +279,8 @@ export default function WebhookDemoPage({ authFetch }: WebhookDemoPageProps) {
     const load = async () => {
       try {
         const setupRes = await authFetch('/api/mix-webhook/playground/setup');
-        if (!setupRes.ok) throw new Error('Failed to load webhook demo setup');
-        const setupData = await setupRes.json() as WebhookSetup;
+        if (!setupRes.ok) throw new Error(`Failed to load webhook demo setup (${setupRes.status})`);
+        const setupData = await parseResponseJson<WebhookSetup>(setupRes);
         if (!mounted) return;
         setSetup(setupData);
         await loadDashboard();
@@ -339,7 +355,11 @@ export default function WebhookDemoPage({ authFetch }: WebhookDemoPageProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ payload }),
       });
-      const data = await res.json() as SendResult;
+      const data = await parseResponseJson<SendResult>(res);
+      if (!res.ok && !data.error) {
+        data.error = `Send failed (${res.status})`;
+        data.ok = false;
+      }
       setSendResult(data);
       if (data.dashboard) setDashboard(data.dashboard);
       else await loadDashboard();
