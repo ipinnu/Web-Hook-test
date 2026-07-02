@@ -3,8 +3,19 @@ import path from 'path'
 import fs from 'fs'
 import * as dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
-import { startPolling, pollOnce, clearTriggeredEvent, resetState, getWarningEvents, getSessionTrips, getDriverDistanceSummary } from './scripts/mix-test.js'
-import { insertWebhookEvents, getRecentWebhookEvents, normalizeWebhookBody } from './scripts/mix-db.js'
+import fetch from 'node-fetch'
+import { pollOnce, clearTriggeredEvent, resetState, getWarningEvents, getSessionTrips, getDriverDistanceSummary } from './scripts/mix-test.js'
+import { normalizeInboundBody, processWebhookPayloads } from './scripts/mix-webhook-process.js'
+import {
+  initWebhookStore,
+  insertInboxRecords,
+  getRecentInbox,
+  getWebhookDashboardData,
+  queryPostgresRecent,
+  isPostgresReady,
+  getWebhookDir,
+  getStoreInfo,
+} from './scripts/mix-webhook-store.js'
 
 dotenv.config({ path: ['.env.local', '.env'] })
 
@@ -44,6 +55,59 @@ function loadAcknowledged() {
 
 function saveAcknowledged(ids) {
   fs.writeFileSync(ACKNOWLEDGED_FILE, JSON.stringify(ids, null, 2))
+}
+
+function readFixture(name) {
+  const filePath = path.join(__dirname, 'scripts', 'fixtures', name)
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'))
+}
+
+function stampDemoPayload(payload, kind) {
+  const now = new Date().toISOString()
+  const id = `MOCK-DEMO-${kind.toUpperCase()}-${Date.now()}`
+  const next = JSON.parse(JSON.stringify(payload))
+
+  if (next.EventId) {
+    next.EventId = id
+    next.EventDateTime = now
+    next.ReceivedDateTime = now
+    if (next.Position) next.Position.FormattedAddress = 'DEMO - not real MiX data'
+  }
+  if (next.TripId) {
+    next.TripId = id
+    next.TripStart = new Date(Date.now() - 45 * 60 * 1000).toISOString()
+    next.TripEnd = now
+  }
+  if (next.Timestamp) {
+    next.Timestamp = now
+    next.FormattedAddress = 'DEMO - not real MiX data'
+  }
+
+  return next
+}
+
+function getWebhookDemoSamples() {
+  const panic = stampDemoPayload(readFixture('mix-webhook-panic.json'), 'panic')
+  const trip = stampDemoPayload(readFixture('mix-webhook-trip.json'), 'trip')
+  const position = stampDemoPayload(readFixture('mix-webhook-position.json'), 'position')
+
+  return {
+    panic,
+    trip,
+    position,
+    vehicle: {
+      AssetId: '1234567890123456789',
+      RegistrationNumber: 'DEMO-JMG-001',
+      Description: 'DEMO - JMG sample vehicle',
+      Make: 'Demo',
+      Model: 'Webhook',
+    },
+    driver: {
+      DriverId: '1234567890123456790',
+      Name: 'DEMO Driver',
+      MobileNumber: '+2340000000000',
+    },
+  }
 }
 
 // Block direct access to sensitive JSON files
@@ -211,26 +275,29 @@ app.get('/api/events/log', (req, res) => {
 
 // Public ping — verify domain/nginx routes to this app (no auth)
 app.get('/api/mix-webhook/health', (_req, res) => {
+  const store = getStoreInfo()
   res.json({
     ok: true,
     service: 'jmg-mix-webhook',
     webhookUrl: WEBHOOK_URL,
     secretConfigured: Boolean(WEBHOOK_SECRET),
+    store,
   })
 })
 
 // MiX webhook — MiX (or test scripts) POST events here; no dashboard x-api-secret
-app.post('/api/mix-webhook', (req, res) => {
+app.post('/api/mix-webhook', async (req, res) => {
   if (!isWebhookAuthorized(req)) return unauthorized(res)
 
-  const events = normalizeWebhookBody(req.body)
-  if (events.length === 0) {
-    return res.status(400).json({ ok: false, error: 'Expected a MiX event object or array of events' })
+  const items = normalizeInboundBody(req.body)
+  if (items.length === 0) {
+    return res.status(400).json({ ok: false, error: 'Unrecognised payload — expected event, trip, vehicle, driver, site, or position' })
   }
 
   try {
-    const ids = insertWebhookEvents(events)
-    res.status(200).json({ ok: true, count: ids.length, ids })
+    const ids = await insertInboxRecords(items)
+    const processed = await processWebhookPayloads(items)
+    res.status(200).json({ ok: true, count: ids.length, ids, processed, store: getStoreInfo() })
   } catch (err) {
     console.error('Webhook insert failed:', err.message)
     res.status(500).json({ ok: false, error: 'Failed to store event' })
@@ -238,10 +305,90 @@ app.post('/api/mix-webhook', (req, res) => {
 })
 
 // Inspect recent webhook events (dashboard auth)
-app.get('/api/mix-webhook/events', (req, res) => {
+app.get('/api/mix-webhook/events', async (req, res) => {
   if (!isAuthorized(req)) return unauthorized(res)
   const limit = Math.min(Number(req.query.limit) || 50, 200)
-  res.json(getRecentWebhookEvents(limit))
+  const source = req.query.source?.toString() || 'file'
+  if (source === 'postgres' && isPostgresReady()) {
+    return res.json(await queryPostgresRecent(limit))
+  }
+  res.json(getRecentInbox(limit))
+})
+
+// Webhook demo dashboard data — reads only the isolated webhook-data store
+app.get('/api/mix-webhook/dashboard-data', (req, res) => {
+  if (!isAuthorized(req)) return unauthorized(res)
+  const limit = Math.min(Number(req.query.limit) || 20, 100)
+  res.json(getWebhookDashboardData(limit))
+})
+
+// Webhook demo setup — safe metadata and sample payloads, never raw secrets
+app.get('/api/mix-webhook/playground/setup', (req, res) => {
+  if (!isAuthorized(req)) return unauthorized(res)
+  res.json({
+    webhookUrl: WEBHOOK_URL,
+    dashboardDataUrl: '/api/mix-webhook/dashboard-data?limit=20',
+    eventsUrl: '/api/mix-webhook/events?limit=10',
+    docsUrl: '/docs/mix-webhook',
+    secretConfigured: Boolean(WEBHOOK_SECRET),
+    expectedHeaders: {
+      'Content-Type': 'application/json',
+      'x-webhook-secret': WEBHOOK_SECRET ? 'Configured' : 'Missing',
+    },
+    samples: getWebhookDemoSamples(),
+  })
+})
+
+// Webhook demo send — the browser calls this; the server posts to the real webhook route
+app.post('/api/mix-webhook/playground/send', async (req, res) => {
+  if (!isAuthorized(req)) return unauthorized(res)
+  if (!WEBHOOK_SECRET) {
+    return res.status(500).json({ ok: false, error: 'Webhook secret is not configured' })
+  }
+
+  const payload = req.body?.payload
+  if (!payload || typeof payload !== 'object') {
+    return res.status(400).json({ ok: false, error: 'Expected JSON object or array payload' })
+  }
+
+  try {
+    const loopbackUrl = `http://127.0.0.1:${PORT}/api/mix-webhook`
+    const response = await fetch(loopbackUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-webhook-secret': WEBHOOK_SECRET,
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const text = await response.text()
+    let postResponse
+    try {
+      postResponse = JSON.parse(text)
+    } catch {
+      postResponse = { raw: text }
+    }
+
+    res.status(response.ok ? 200 : response.status).json({
+      ok: response.ok,
+      webhookUrl: WEBHOOK_URL,
+      sent: payload,
+      postStatus: response.status,
+      postResponse,
+      fetchUrl: '/api/mix-webhook/dashboard-data?limit=20',
+      dashboard: getWebhookDashboardData(20),
+      fetched: getRecentInbox(10),
+    })
+  } catch (err) {
+    console.error('Webhook demo send failed:', err.message)
+    res.status(500).json({ ok: false, error: 'Failed to send demo payload' })
+  }
+})
+
+// MiX webhook documentation (public HTML)
+app.get('/docs/mix-webhook', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'docs', 'mix-webhook.html'))
 })
 
 // Serve built frontend
@@ -253,8 +400,11 @@ app.use((req, res) => {
 })
 
 // Start server and polling
+initWebhookStore().catch(err => {
+  console.error('Webhook store init failed:', err.message)
+})
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 JMG Dashboard server running on port ${PORT}`)
-  console.log(`📡 Starting MiX polling...`)
-  startPolling({ maxRuns: null })
+  console.log(`📡 Webhook demo mode — MiX polling disabled`)
 })

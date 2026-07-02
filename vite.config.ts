@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { pollOnce, startPolling, clearTriggeredEvent, resetState, getWarningEvents, getSessionTrips, getDriverDistanceSummary } from './scripts/mix-test.js'
+import { pollOnce, clearTriggeredEvent, resetState, getWarningEvents, getSessionTrips, getDriverDistanceSummary } from './scripts/mix-test.js'
 import fs from 'fs'
 import path from 'path'
 
@@ -27,8 +27,6 @@ function isAuthorized(req: any): boolean {
   return secret === API_SECRET
 }
 
-let pollingStarted = false
-
 export default defineConfig({
   server: {
     host: true,
@@ -41,11 +39,7 @@ export default defineConfig({
     {
       name: 'mix-data-poller',
       configureServer(server) {
-        if (!pollingStarted) {
-          startPolling({ maxRuns: null })
-          pollingStarted = true
-        }
-
+        // Webhook demo branch — MiX polling disabled (no startPolling here)
         // Refresh endpoint
         server.middlewares.use('/api/refresh', async (req, res) => {
           if (!isAuthorized(req)) {

@@ -1,0 +1,11 @@
+{
+  "TripId": "8888888888888888001",
+  "AssetId": "1234567890123456789",
+  "DriverId": "1234567890123456790",
+  "DistanceKilometers": 14.2,
+  "TripStart": "2026-06-30T08:00:00.000Z",
+  "TripEnd": "2026-06-30T08:45:00.000Z",
+  "DrivingTime": 2400,
+  "Duration": 2700,
+  "MaxSpeedKilometersPerHour": 72
+}

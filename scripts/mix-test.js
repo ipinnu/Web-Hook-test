@@ -741,6 +741,15 @@ async function getLatestActiveEvents(token) {
   activeParseRetryDone = false;
   if (newToken) { activeSinceToken = newToken; console.log(`📌 Updated activeSinceToken: ${activeSinceToken}`); }
 
+  applyActiveEvents(parsed);
+  return parsed;
+}
+
+function applyActiveEvents(parsed) {
+  if (!Array.isArray(parsed) || parsed.length === 0) return;
+
+  if (driverLookup.size === 0) loadDriverLookup();
+
   const eventsLogPath = path.join(process.cwd(), 'events.log');
 
   // Handle panic events
@@ -851,7 +860,13 @@ async function getLatestActiveEvents(token) {
     });
   }
 
-  return parsed;
+  panicEvents.forEach(event => {
+    const assetId = event.AssetId?.toString();
+    if (!assetId) return;
+    if (!triggeredEvents.has(assetId)) triggeredEvents.set(assetId, []);
+    const existing = triggeredEvents.get(assetId);
+    if (!existing.some(e => e.EventId === event.EventId)) existing.push(event);
+  });
 }
 
 function mergeData(positions) {
@@ -966,18 +981,6 @@ export async function pollOnce() {
       console.log(`✅ Vehicles: ${vehicleLookup.size} | Active Events: ${latestActiveEvents.length} | Positions: ${positions.length}`);
 
       console.log(`Trips: New ${latestTrips.length} | Session ${sessionTrips.size}`);
-
-      latestActiveEvents.forEach(event => {
-        if (event.EventTypeId === PANIC_EVENT_TYPE_ID) {
-          const assetId = event.AssetId?.toString();
-          if (assetId) {
-            if (!triggeredEvents.has(assetId)) triggeredEvents.set(assetId, []);
-            const existing = triggeredEvents.get(assetId);
-            const alreadyStored = existing.some(e => e.EventId === event.EventId);
-            if (!alreadyStored) existing.push(event);
-          }
-        }
-      });
 
       if (vehicleLookup.size === 0 || positions.length === 0) {
         console.log('⚠️ Empty response from MiX, skipping write to data.json');

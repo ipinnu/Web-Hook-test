@@ -1,0 +1,10 @@
+{
+  "AssetId": "1234567890123456789",
+  "Latitude": 6.5244,
+  "Longitude": 3.3792,
+  "SpeedKilometresPerHour": 48,
+  "Heading": 180,
+  "Timestamp": "2026-06-30T10:15:00.000Z",
+  "FormattedAddress": "Lagos, Nigeria",
+  "DriverId": "1234567890123456790"
+}

@@ -1,0 +1,83 @@
+export const webhookDemoContent = {
+  title: 'Webhook demo',
+  subtitle: 'MiX can push fleet events to our server. This page shows data arriving and updating the dashboard.',
+  badge: 'Test environment - sample data only',
+  introSteps: [
+    {
+      title: 'MiX sends JSON',
+      body: 'MiX posts fleet events, trips, positions, and reference updates to the webhook URL.',
+    },
+    {
+      title: 'The server receives it',
+      body: 'The webhook validates the shared secret, accepts the JSON, and saves the payload.',
+    },
+    {
+      title: 'The dashboard updates',
+      body: 'The cards and table below read the saved webhook data and refresh after each send.',
+    },
+  ],
+  statCards: {
+    inboxTotal: 'Events received',
+    panicEvents: 'Panic alerts',
+    warningEvents: 'Warnings',
+    trips: 'Trips',
+    vehicles: 'Vehicles',
+    positions: 'Live positions',
+  },
+  deliveryPatterns: [
+    {
+      title: 'Real-time events',
+      timing: 'Posted immediately when something happens',
+      examples: 'Panic, harsh braking, overspeeding, idle, harsh cornering',
+    },
+    {
+      title: 'Trip updates',
+      timing: 'Posted when a trip is completed',
+      examples: 'TripId, AssetId, DriverId, distance, start time, end time',
+    },
+    {
+      title: 'Live position',
+      timing: 'Posted during movement and less often when stopped',
+      examples: 'AssetId, coordinates, speed, heading, address',
+    },
+    {
+      title: 'Reference data',
+      timing: 'Posted during initial sync and whenever records change',
+      examples: 'Vehicles, drivers, sites, registrations, names',
+    },
+  ],
+  sampleNotes: {
+    panic: 'This mimics a driver pressing a panic button. MiX sends it immediately as an event payload.',
+    trip: 'This mimics MiX sending a completed trip after the vehicle journey ends.',
+    position: 'This mimics MiX sending a live vehicle position update.',
+    vehicle: 'This mimics MiX sending asset or vehicle reference data so IDs can resolve to registrations.',
+    driver: 'This mimics MiX sending driver reference data so DriverId can resolve to a person.',
+  },
+  fieldGuide: [
+    'If the JSON contains EventTypeId, the server treats it as an event.',
+    'If it contains TripId or trip timestamps plus distance, the server treats it as a trip.',
+    'If it contains AssetId plus latitude and longitude, the server treats it as a position.',
+    'If the server cannot recognise the shape, it returns a clear error.',
+  ],
+  labels: {
+    sendHeading: 'Send test data',
+    sendHelp: 'Paste JSON MiX would send, or load a sample. This simulates the production webhook flow.',
+    webhookUrl: 'Webhook URL',
+    headers: 'Expected headers',
+    loadPanic: 'Load panic sample',
+    loadTrip: 'Load trip sample',
+    loadPosition: 'Load position sample',
+    loadVehicle: 'Load vehicle sample',
+    loadDriver: 'Load driver sample',
+    send: 'Send',
+    clear: 'Clear',
+    whatWeSent: 'What we sent',
+    serverResponse: 'Server response',
+    savedOnServer: 'Saved on server',
+    technicalDetails: 'Technical details',
+    docsLink: 'Full MiX integration notes',
+    success: 'Received - dashboard updated',
+    emptyEvents: 'No webhook events yet. Load a sample below and click Send.',
+    invalidJson: 'Could not accept this JSON - check the format.',
+  },
+}

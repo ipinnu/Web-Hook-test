@@ -67,11 +67,10 @@ raw-events.json
 since-token.txt
 metadata.json 
 
-# SQLite webhook store
-mix-events.db
-mix-events.db-*
+# Webhook test store (isolated from polling)
+webhook-data/
 
-# Webhook event log
+# Legacy webhook log at repo root
 webhook-events.log
 
 #new

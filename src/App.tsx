@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SignedIn, SignedOut, SignIn, useClerk } from '@clerk/clerk-react';
-import { Moon, Sun, Power, RotateCcw, ScrollText, Download, Map, Table, ShieldAlert, Truck, Navigation, MapPin, LayoutGrid, Gauge, ChevronDown, Check } from 'lucide-react';
+import { Moon, Sun, Power, RotateCcw, ScrollText, Download, Map, Table, ShieldAlert, Truck, Navigation, MapPin, LayoutGrid, Gauge, ChevronDown, Check, FileJson } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import AnomaliesTable from './components/AnomaliesTable';
 import MapView from './components/MapView';
@@ -8,6 +8,7 @@ import GroupedView from './components/GroupedView';
 import EventLogPanel from './components/EventLogPanel';
 import DownloadModal from './components/DownloadModal';
 import DriverRiskPanel from './components/DriverRiskPanel';
+import WebhookDemoPage from './components/WebhookDemoPage';
 
 type StatusFilter = 'All' | 'Moving' | 'Idle' | 'Excessive Idle' | 'Stationary' | 'Parked' | 'Offline' | 'Inactive';
 
@@ -371,6 +372,10 @@ function DashboardContent() {
               </div>
 
               {/* Action buttons */}
+              <a className="cd-toolbtn" href="/webhook-demo" aria-label="Webhook demo" style={{ textDecoration: 'none' }}>
+                <FileJson size={16} />
+                <span className="cd-toolbtn-label">Webhook demo</span>
+              </a>
               <button className="cd-toolbtn" onClick={() => setShowLogPanel(true)} aria-label="Event log">
                 <ScrollText size={16} />
                 <span className="cd-toolbtn-label">Log</span>
@@ -702,7 +707,7 @@ export default function App() {
         </div>
       </SignedOut>
       <SignedIn>
-        <DashboardContent />
+        <WebhookDemoPage authFetch={authFetch} />
       </SignedIn>
     </>
   );

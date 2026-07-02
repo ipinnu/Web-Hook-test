@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JMG — MiX Webhook Integration</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --surface: #ffffff;
+      --border: #dde3ec;
+      --text: #1a2332;
+      --muted: #5a677a;
+      --accent: #e85d04;
+      --accent-light: #fff4ed;      --code-bg: #f0f3f8;
+      --green: #15803d;
+      --radius: 8px;
+      --font: 'IBM Plex Sans', system-ui, sans-serif;
+      --display: 'Space Grotesk', system-ui, sans-serif;
+      --max: 720px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1.25rem 1.5rem;
+    }
+
+    header .top {
+      max-width: 960px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    header .brand {
+      font-family: var(--display);
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: -0.01em;
+    }
+
+    header .brand span { color: var(--muted); font-weight: 500; }
+
+    .tabs {
+      display: flex;
+      gap: 0.25rem;
+      background: var(--code-bg);
+      padding: 4px;
+      border-radius: var(--radius);
+    }
+
+    .tabs button {
+      font-family: var(--font);
+      font-size: 0.875rem;
+      font-weight: 500;
+      padding: 0.45rem 1rem;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .tabs button.active {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    h2 {
+      font-family: var(--display);
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+    }
+
+    .lead {
+      color: var(--muted);
+      margin-bottom: 2rem;
+      max-width: var(--max);
+    }
+
+    h3 {
+      font-family: var(--display);
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin: 2rem 0 0.75rem;
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--border);
+    }
+
+    h3:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+
+    p { margin-bottom: 0.75rem; color: var(--muted); max-width: var(--max); }
+    p strong { color: var(--text); }
+
+    ul {
+      max-width: var(--max);
+      margin: 0 0 1rem 1.25rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    ul li { margin-bottom: 0.35rem; }
+    ul li strong { color: var(--text); }
+
+    a { color: var(--accent); }
+
+    table {
+      width: 100%;
+      max-width: var(--max);
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      margin: 0.75rem 0 1.25rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 0.65rem 0.85rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background: var(--code-bg);
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    code {
+      font-family: ui-monospace, 'Cascadia Code', monospace;
+      font-size: 0.85em;
+      background: var(--code-bg);
+      padding: 0.12em 0.35em;
+      border-radius: 4px;
+      color: #c2410c;
+    }
+
+    pre {
+      background: #1a2332;
+      color: #e8edf4;
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-size: 0.8rem;
+      line-height: 1.55;
+      margin: 0.75rem 0 1.25rem;
+      max-width: var(--max);
+    }
+
+    pre code { background: none; padding: 0; color: inherit; }
+
+    .endpoint {
+      display: flex;
+      align-items: stretch;
+      max-width: var(--max);
+      margin: 0.75rem 0 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .method {
+      background: var(--green);
+      color: #fff;
+      font-family: ui-monospace, monospace;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.85rem 1rem;
+      display: flex;
+      align-items: center;
+    }
+
+    .method.get { background: #2563eb; }
+
+    .endpoint code {
+      flex: 1;
+      padding: 0.85rem 1rem;
+      background: transparent;
+      color: var(--text);
+      font-size: 0.85rem;
+      word-break: break-all;
+      display: flex;
+      align-items: center;
+    }
+
+    .note {
+      max-width: var(--max);
+      background: var(--accent-light);
+      border-left: 3px solid var(--accent);
+      padding: 0.85rem 1rem;
+      border-radius: 0 var(--radius) var(--radius) 0;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .note strong { color: var(--text); }
+
+    footer {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    @media print {
+      .tabs { display: none; }
+      .page { display: block !important; page-break-after: always; }
+      body { background: #fff; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="top">
+      <div class="brand">Best Practices Ltd <span>· JMG Webhook Integration</span></div>
+      <div class="tabs" role="tablist">
+        <button type="button" class="active" data-page="connection" role="tab">1. Connection</button>
+        <button type="button" data-page="payload" role="tab">2. Data requirements</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- PAGE 1: Connection -->
+    <article id="page-connection" class="page active">
+      <h2>Webhook connection</h2>
+      <p class="lead">Best Practices Ltd provides the endpoint below as the <strong>only authorised channel</strong> for MiX to deliver push data to the JMG fleet integration. Configure MiX Integrate to POST JSON here whenever events occur or data changes — see page 2 for what to send and when.</p>
+
+      <h3>Storage (current setup)</h3>
+      <p>Webhook payloads are saved to <code>webhook-data/</code> on the server — regular files, no database cost. This is separate from polling output (<code>public/</code>, etc.). The MiX URL does not change if storage is upgraded later.</p>
+      <table>
+        <thead>
+          <tr><th>Phase</th><th>Storage</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>1 — Demo (now)</strong></td><td><code>webhook-data/</code> files</td><td>Active — default, no extra cost</td></tr>
+          <tr><td><strong>2 — Live dashboard</strong></td><td>Read from webhook store</td><td>Planned — same URL, wire UI to webhook data</td></tr>
+          <tr><td><strong>3 — PostgreSQL</strong></td><td>Managed database</td><td>Future — only if you add a paid DB later; same MiX URL</td></tr>
+        </tbody>
+      </table>
+      <p>No <code>DATABASE_URL</code> is required for the demo. Leave <code>WEBHOOK_STORE=file</code> (or unset).</p>
+
+      <h3>Authorised delivery endpoint</h3>
+      <div class="endpoint">
+        <span class="method">POST</span>
+        <code>https://jmg.bestpracticesltd.com.ng/api/mix-webhook</code>
+      </div>
+      <p>All push data for JMG must be delivered here via HTTPS POST with a JSON body (see page 2). Traffic to any other URL will not be processed.</p>
+
+      <h3>Health check</h3>
+      <div class="endpoint">
+        <span class="method get">GET</span>
+        <code>https://jmg.bestpracticesltd.com.ng/api/mix-webhook/health</code>
+      </div>
+      <p>Optional. Unauthenticated status check to confirm the endpoint is reachable before enabling push. This URL does not accept event data.</p>
+
+      <h3>Authentication</h3>
+      <p>Every <strong>POST</strong> to the authorised endpoint must include the shared secret issued during onboarding:</p>
+      <table>
+        <thead>
+          <tr><th>Header</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>Content-Type</code></td><td><code>application/json</code></td></tr>
+          <tr><td><code>x-webhook-secret</code></td><td><em>Provided separately during onboarding</em></td></tr>
+        </tbody>
+      </table>
+      <p>Requests without a valid secret receive <code>401 Unauthorized</code> and are discarded.</p>
+
+      <h3>Responses</h3>
+      <p>Our server returns the following when data is posted to the authorised endpoint:</p>
+      <table>
+        <thead>
+          <tr><th>Status</th><th>Body</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>200</code></td><td><code>{"ok":true,"count":1,"ids":[1]}</code></td><td>Accepted and stored</td></tr>
+          <tr><td><code>401</code></td><td><code>Unauthorized</code></td><td>Invalid <code>x-webhook-secret</code></td></tr>
+          <tr><td><code>400</code></td><td><code>{"ok":false,"error":"..."}</code></td><td>Body is not a valid event payload</td></tr>
+          <tr><td><code>500</code></td><td><code>{"ok":false,"error":"..."}</code></td><td>Server error</td></tr>
+        </tbody>
+      </table>
+    </article>
+
+    <!-- PAGE 2: Data requirements -->
+    <article id="page-payload" class="page">
+      <h2>Data requirements</h2>
+      <p class="lead">Configure MiX Integrate to <strong>push JSON to our webhook</strong> (page 1) whenever relevant data is created or updated for the JMG organisation. Your integration work is to <strong>define which events trigger delivery</strong> and ensure the payloads below are POSTed to the authorised endpoint. We do not pull webhook data — delivery is push-only from MiX.</p>
+
+      <h3>How push delivery works</h3>
+      <p>MiX Integrate sends an HTTPS POST to our endpoint each time something happens in the fleet. There are three delivery patterns:</p>
+      <table>
+        <thead>
+          <tr><th>Pattern</th><th>When MiX should POST</th><th>Entity types</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Real-time events</strong></td>
+            <td>Immediately when the event occurs for a JMG asset</td>
+            <td>Events (panic, harsh braking, overspeeding, etc.)</td>
+          </tr>
+          <tr>
+            <td><strong>Lifecycle updates</strong></td>
+            <td>When a trip completes, or when master data is created or changed</td>
+            <td>Trips, drivers, vehicles, sites</td>
+          </tr>
+          <tr>
+            <td><strong>Live position</strong></td>
+            <td>While moving: POST a position every <strong>5 minutes</strong>. When stopped or idle: every <strong>30 minutes</strong>.</td>
+            <td>Position</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Organisation scope</h3>
+      <p>Only data for the following organisation may be sent to this integration. Do not route events from other organisations to these endpoints.</p>
+      <table>
+        <thead>
+          <tr><th>Parameter</th><th>Value</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Organisation ID</td><td><code>— provided during onboarding —</code></td></tr>
+          <tr><td>Region</td><td>ZA (MiX Integrate)</td></tr>
+        </tbody>
+      </table>
+      <p>The organisation ID will be supplied in a separate secure channel together with the webhook secret.</p>
+
+      <h3>Payload structure</h3>
+      <p>Each POST body is JSON. Send a single entity object, an array of entities, or a wrapper with an <code>events</code>, <code>trips</code>, or <code>data</code> array — whichever matches your Integrate push configuration. Field names and nesting should follow the <a href="https://integrate.za.mixtelematics.com/#api-reference" target="_blank" rel="noopener">MiX Integrate API entity definitions</a>.</p>
+      <p>Supported entity types and how we identify them:</p>
+      <table>
+        <thead>
+          <tr><th>Type</th><th>Identified by</th><th>Example fields</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Event</td><td><code>EventTypeId</code></td><td><code>EventId</code>, <code>AssetId</code>, <code>Position</code></td></tr>
+          <tr><td>Trip</td><td><code>TripId</code> or trip timestamps + distance</td><td><code>DistanceKilometers</code>, <code>TripStart</code>, <code>TripEnd</code></td></tr>
+          <tr><td>Vehicle</td><td><code>AssetId</code> + registration/description</td><td><code>RegistrationNumber</code>, <code>Description</code></td></tr>
+          <tr><td>Driver</td><td><code>DriverId</code> + name/phone</td><td><code>Name</code>, <code>MobileNumber</code></td></tr>
+          <tr><td>Position</td><td><code>AssetId</code> + coordinates</td><td><code>Latitude</code>, <code>Longitude</code>, <code>Timestamp</code></td></tr>
+          <tr><td>Site</td><td><code>GroupId</code> + <code>Type</code></td><td><code>Name</code>, zone fields</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Events — configure and push</h3>
+      <p>Events are the primary integration surface. In MiX Integrate, <strong>enable webhook push for each <code>EventTypeId</code> listed below</strong> for the JMG organisation. When any of these events fire — for example, a driver triggers a panic button or a vehicle exceeds the speed limit — POST the event entity to our endpoint <strong>without delay</strong>. Do not batch events for later delivery unless your platform requires it; near-real-time delivery is expected.</p>
+      <p>Each event object must include at least:</p>
+      <table>
+        <thead>
+          <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>EventId</code></td><td>string</td><td>Unique event identifier</td></tr>
+          <tr><td><code>EventTypeId</code></td><td>string</td><td>MiX event type identifier</td></tr>
+          <tr><td><code>AssetId</code></td><td>string</td><td>Vehicle / asset identifier</td></tr>
+          <tr><td><code>EventDateTime</code></td><td>ISO 8601</td><td>When the event occurred</td></tr>
+        </tbody>
+      </table>
+      <p>Recommended where available: <code>DriverId</code>, <code>ReceivedDateTime</code>, <code>Position</code> (<code>Latitude</code>, <code>Longitude</code>, <code>FormattedAddress</code>).</p>
+
+      <h3>Event types to subscribe</h3>
+      <p>Configure push delivery for <strong>all</strong> of the following <code>EventTypeId</code> values. These are fixed constants in MiX — use the exact IDs below:</p>
+      <table>
+        <thead>
+          <tr><th>EventTypeId</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>-4444421556390778105</code></td><td>Panic</td></tr>
+          <tr><td><code>-3393530750645328945</code></td><td>Idle</td></tr>
+          <tr><td><code>4650840888823746894</code></td><td>Excessive idle</td></tr>
+          <tr><td><code>4750800303282680186</code></td><td>Harsh braking</td></tr>
+          <tr><td><code>6454149451280645233</code></td><td>Harsh acceleration</td></tr>
+          <tr><td><code>-3890646499157906515</code></td><td>Overspeeding</td></tr>
+          <tr><td><code>-4596269900191457380</code></td><td>Overspeed (tiered)</td></tr>
+          <tr><td><code>4291175374538259638</code></td><td>Harsh cornering</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Trips — push on completion</h3>
+      <p>When a driver completes a trip for a JMG asset, POST the trip entity. Required identifiers: <code>TripId</code>, <code>AssetId</code>, <code>TripStart</code>, <code>TripEnd</code>, and <code>DistanceKilometers</code>. Include <code>DriverId</code> where available.</p>
+
+      <h3>Reference data — drivers, vehicles, sites</h3>
+      <p>Master data should be pushed so our dashboard can resolve IDs to names and registrations:</p>
+      <ul>
+        <li><strong>Initial sync:</strong> Before go-live, push the current driver, vehicle, and site records for the JMG fleet.</li>
+        <li><strong>Ongoing updates:</strong> POST whenever a driver is added or their details change, a vehicle is registered or updated, or a site/geofence is created or modified.</li>
+      </ul>
+      <p>Drivers are identified by <code>DriverId</code> with <code>Name</code> and/or <code>MobileNumber</code>. Vehicles by <code>AssetId</code> with <code>RegistrationNumber</code> and/or <code>Description</code>. Sites by <code>GroupId</code> and <code>Type</code>.</p>
+
+      <h3>Example payloads</h3>
+      <p><strong>Event</strong> — panic, sent immediately when triggered:</p>
+      <pre><code>{
+  "EventId": "9999999999999999001",
+  "EventTypeId": "-4444421556390778105",
+  "AssetId": "1234567890123456789",
+  "DriverId": "1234567890123456790",
+  "EventDateTime": "2026-06-30T10:00:00.000Z",
+  "ReceivedDateTime": "2026-06-30T10:00:01.000Z",
+  "Position": {
+    "Latitude": 6.5244,
+    "Longitude": 3.3792,
+    "FormattedAddress": "Lagos, Nigeria"
+  }
+}</code></pre>
+      <p><strong>Trip</strong> — sent when the trip ends:</p>
+      <pre><code>{
+  "TripId": "8888888888888888001",
+  "AssetId": "1234567890123456789",
+  "DriverId": "1234567890123456790",
+  "DistanceKilometers": 14.2,
+  "TripStart": "2026-06-30T08:00:00.000Z",
+  "TripEnd": "2026-06-30T08:45:00.000Z"
+}</code></pre>
+    </article>
+  </main>
+
+  <footer>
+    Best Practices Ltd · JMG Fleet Integration · Document for MiX Telematics onboarding ·
+    <a href="https://integrate.za.mixtelematics.com/#api-reference" target="_blank" rel="noopener">MiX Integrate API</a>
+  </footer>
+
+  <script>
+    document.querySelectorAll('.tabs button').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.querySelectorAll('.tabs button').forEach(function (b) { b.classList.remove('active'); });
+        document.querySelectorAll('.page').forEach(function (p) { p.classList.remove('active'); });
+        btn.classList.add('active');
+        document.getElementById('page-' + btn.dataset.page).classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
