@@ -2,10 +2,9 @@
 # One-time / update deploy for webhook demo on the droplet.
 # No new domain, no GitHub Actions — just port 3005 next to main app on 3001.
 #
-# On the droplet:
-#   curl -sL https://raw.githubusercontent.com/ipinnu/Bpl-JMG-Dashboard/webhook-demo/deploy/setup-webhook-demo.sh | bash
-# Or clone and run:
-#   bash deploy/setup-webhook-demo.sh
+# On the droplet (private repo — must clone with git, not curl):
+#   git clone -b webhook-demo https://github.com/ipinnu/Bpl-JMG-Dashboard.git /var/www/jmg-webhook-demo
+#   bash /var/www/jmg-webhook-demo/deploy/setup-webhook-demo.sh
 
 set -e
 
