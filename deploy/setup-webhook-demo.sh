@@ -10,8 +10,8 @@
 #    git worktree add /var/www/jmg-webhook-demo webhook-demo
 #    bash /var/www/jmg-webhook-demo/deploy/setup-webhook-demo.sh
 #
-# B) Separate public repo (no GitHub login on server):
-#    git clone https://github.com/YOUR_USER/Bpl-JMG-Webhook-Demo.git /var/www/jmg-webhook-demo
+# B) Public demo repo (no GitHub login on droplet):
+#    git clone https://github.com/ipinnu/Web-Hook-test.git /var/www/jmg-webhook-demo
 #    bash /var/www/jmg-webhook-demo/deploy/setup-webhook-demo.sh
 #
 # C) Upload from your PC (if fetch fails on droplet):
@@ -24,8 +24,8 @@ set -e
 
 APP_DIR=/var/www/jmg-webhook-demo
 MAIN_ENV=/var/www/jmg-dashboard/.env
-REPO=https://github.com/ipinnu/Bpl-JMG-Dashboard.git
-BRANCH=webhook-demo
+REPO=https://github.com/ipinnu/Web-Hook-test.git
+BRANCH=main
 PORT=3005
 
 PUBLIC_IP=$(curl -sf ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
@@ -84,4 +84,4 @@ echo "  Webhook demo: http://${PUBLIC_IP}:${PORT}"
 echo "  Health:       http://${PUBLIC_IP}:${PORT}/api/mix-webhook/health"
 echo "  Main dashboard unchanged on port 3001"
 echo "=========================================="
-echo "Clerk: add http://${PUBLIC_IP}:${PORT} to allowed origins if sign-in fails."
+echo "Clerk removed — demo opens without sign-in."

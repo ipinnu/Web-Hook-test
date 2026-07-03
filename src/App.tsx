@@ -663,52 +663,5 @@ function DashboardContent() {
 }
 
 export default function App() {
-  return (
-    <>
-      <SignedOut>
-        <div className="signin-bg">
-          <div className="glow-orb glow-orb-1" />
-          <div className="glow-orb glow-orb-2" />
-          <div className="glow-orb glow-orb-3" />
-          <svg style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', zIndex: 3, pointerEvents: 'none', opacity: 0.20 }} aria-hidden="true">
-            <filter id="signin-noise">
-              <feTurbulence type="fractalNoise" baseFrequency="0.78" numOctaves="4" stitchTiles="stitch" />
-              <feColorMatrix type="saturate" values="0" />
-            </filter>
-            <rect width="100%" height="100%" filter="url(#signin-noise)" />
-          </svg>
-          <div className="signin-card-wrap">
-            <SignIn
-              appearance={{
-                layout: {
-                  logoImageUrl: '/JMG.avif',
-                  logoLinkUrl: '/',
-                },
-                variables: {
-                  colorPrimary: '#F05022',
-                  colorBackground: '#ffffff',
-                  colorText: '#1a1a1a',
-                  borderRadius: '14px',
-                  fontFamily: 'inherit',
-                },
-                elements: {
-                  card: {
-                    boxShadow: '0 8px 48px rgba(240,80,34,0.12), 0 2px 16px rgba(0,0,0,0.06)',
-                    border: '1px solid rgba(240,80,34,0.08)',
-                  },
-                  logoBox: { height: '100px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
-                  logoImage: { width: '140px', height: '100px', objectFit: 'contain', borderRadius: '10px' },
-                  formButtonPrimary: { backgroundColor: '#F05022', borderRadius: '8px', fontWeight: '600' },
-                  footerAction: { display: 'none' },
-                },
-              }}
-            />
-          </div>
-        </div>
-      </SignedOut>
-      <SignedIn>
-        <WebhookDemoPage authFetch={authFetch} />
-      </SignedIn>
-    </>
-  );
+  return <WebhookDemoPage authFetch={authFetch} />;
 }

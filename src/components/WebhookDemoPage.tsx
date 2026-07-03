@@ -1,5 +1,4 @@
-import { useClerk } from '@clerk/clerk-react';
-import { AlertTriangle, CheckCircle, Copy, Database, FileJson, Moon, Power, RefreshCw, Send, Sun } from 'lucide-react';
+import { Moon, Sun, RefreshCw, Send, CheckCircle, Copy, Database, FileJson, AlertTriangle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { webhookDemoContent } from '../config/webhook-demo-content';
@@ -230,7 +229,6 @@ function JsonBlock({ value, minHeight = 180 }: { value: unknown; minHeight?: num
 }
 
 export default function WebhookDemoPage({ authFetch }: WebhookDemoPageProps) {
-  const { signOut } = useClerk();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [setup, setSetup] = useState<WebhookSetup | null>(null);
   const [dashboard, setDashboard] = useState<WebhookDashboardData | null>(null);
@@ -403,10 +401,6 @@ export default function WebhookDemoPage({ authFetch }: WebhookDemoPageProps) {
               <button className="cd-toolbtn" onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme">
                 {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
                 <span className="cd-toolbtn-label">{theme === 'dark' ? 'Light' : 'Dark'}</span>
-              </button>
-              <button className="cd-toolbtn" onClick={() => signOut()} aria-label="Log out" style={{ color: '#c8102e' }}>
-                <Power size={16} />
-                <span className="cd-toolbtn-label">Sign out</span>
               </button>
             </div>
           </div>
