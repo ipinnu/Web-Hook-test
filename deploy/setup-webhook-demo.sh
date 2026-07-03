@@ -2,9 +2,23 @@
 # One-time / update deploy for webhook demo on the droplet.
 # No new domain, no GitHub Actions — just port 3005 next to main app on 3001.
 #
-# On the droplet (private repo — must clone with git, not curl):
-#   git clone -b webhook-demo https://github.com/ipinnu/Bpl-JMG-Dashboard.git /var/www/jmg-webhook-demo
-#   bash /var/www/jmg-webhook-demo/deploy/setup-webhook-demo.sh
+# On the droplet — pick ONE approach:
+#
+# A) Same repo, no second clone (if /var/www/jmg-dashboard already exists):
+#    cd /var/www/jmg-dashboard
+#    git fetch origin webhook-demo
+#    git worktree add /var/www/jmg-webhook-demo webhook-demo
+#    bash /var/www/jmg-webhook-demo/deploy/setup-webhook-demo.sh
+#
+# B) Separate public repo (no GitHub login on server):
+#    git clone https://github.com/YOUR_USER/Bpl-JMG-Webhook-Demo.git /var/www/jmg-webhook-demo
+#    bash /var/www/jmg-webhook-demo/deploy/setup-webhook-demo.sh
+#
+# C) Upload from your PC (if fetch fails on droplet):
+#    scp -r ./BPL-Chevron-Dashboard root@DROPLET_IP:/var/www/jmg-webhook-demo
+#    then SSH in and run this script.
+#
+# Do NOT use: curl raw.githubusercontent.com — private repos return 404.
 
 set -e
 
